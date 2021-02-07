@@ -1,3 +1,5 @@
+import os
+import random
 from concurrent.futures.thread import ThreadPoolExecutor
 from glob import glob
 
@@ -9,12 +11,10 @@ from tensorflow.python.keras.utils.np_utils import to_categorical
 
 class SigmoidClassifierDataGenerator:
     def __init__(self, train_image_path, input_shape, batch_size, validation_split=0.0):
-        image_paths = self._init_image_paths(train_image_path)
-        label_dict = self._init_label_dict(image_paths)
-        self.num_classes = len(label_dict)
-        train_image_paths, validation_image_paths = self._split_paths(image_paths, validation_split)
-        self.train_generator_flow = GeneratorFlow(train_image_paths, label_dict, input_shape, batch_size)
-        self.validation_generator_flow = GeneratorFlow(validation_image_paths, label_dict, input_shape, batch_size)
+        train_image_paths, validation_image_paths, class_names = self.__init_image_paths(train_image_path, validation_split)
+        self.num_classes = len(class_names)
+        self.train_generator_flow = GeneratorFlow(train_image_paths, class_names, input_shape, batch_size)
+        self.validation_generator_flow = GeneratorFlow(validation_image_paths, class_names, input_shape, batch_size)
 
     def flow(self, subset='training'):
         if subset == 'training':
@@ -26,43 +26,31 @@ class SigmoidClassifierDataGenerator:
         return self.num_classes
 
     @staticmethod
-    def _init_image_paths(train_image_path):
-        image_paths = []
-        image_paths += glob(f'{train_image_path}/*/*.jpg')
-        image_paths += glob(f'{train_image_path}/*/*.png')
-        image_paths = np.asarray(image_paths)
-        for i in range(len(image_paths)):
-            image_paths[i] = image_paths[i].replace('\\', '/')
-        return sorted(image_paths)
-
-    @staticmethod
-    def _init_label_dict(image_paths):
-        inc = 0
-        label_dicts = dict()
-        previous_dir_name = ''
-        for path in image_paths:
-            dir_name = path.split('/')[-2]
-            if dir_name == 'unknown':
+    def __init_image_paths(train_image_path, validation_split):
+        dir_paths = sorted(glob(f'{train_image_path}/*'))
+        for i in range(len(dir_paths)):
+            dir_paths[i] = dir_paths[i].replace('\\', '/')
+        class_name_set = set()
+        train_image_paths = []
+        validation_image_paths = []
+        for dir_path in dir_paths:
+            if not os.path.isdir(dir_path):
                 continue
-            if dir_name != previous_dir_name:
-                previous_dir_name = dir_name
-                label_dicts[dir_name] = inc
-                inc += 1
-        return label_dicts
-
-    @staticmethod
-    def _split_paths(image_paths, validation_split):
-        assert 0.0 <= validation_split <= 1.0
-        image_paths = np.asarray(image_paths)
-        if validation_split == 0.0:
-            return image_paths, np.asarray([])
-        r = np.arange(len(image_paths))
-        np.random.shuffle(r)
-        image_paths = image_paths[r]
-        num_train_image_paths = int(len(image_paths) * (1.0 - validation_split))
-        train_image_paths = image_paths[:num_train_image_paths]
-        validation_image_paths = image_paths[num_train_image_paths:]
-        return train_image_paths, validation_image_paths
+            dir_name = dir_path.split('/')[-1]
+            if dir_name != 'unknown':
+                class_name_set.add(dir_name)
+            cur_class_image_paths = glob(f'{dir_path}/*.jpg') + glob(f'{dir_path}/*.png')
+            for i in range(len(cur_class_image_paths)):
+                cur_class_image_paths[i] = cur_class_image_paths[i].replace('\\', '/')
+            if validation_split == 0.0:
+                train_image_paths += cur_class_image_paths
+                continue
+            random.shuffle(cur_class_image_paths)
+            num_cur_class_train_images = int(len(cur_class_image_paths) * (1.0 - validation_split))
+            train_image_paths += cur_class_image_paths[:num_cur_class_train_images]
+            validation_image_paths += cur_class_image_paths[num_cur_class_train_images:]
+        class_names = sorted(list(class_name_set))
+        return train_image_paths, validation_image_paths, class_names
 
 
 class GeneratorFlow(tf.keras.utils.Sequence):
