@@ -13,8 +13,8 @@ class SigmoidClassifierDataGenerator:
         label_dict = self._init_label_dict(image_paths)
         self.num_classes = len(label_dict)
         train_image_paths, validation_image_paths = self._split_paths(image_paths, validation_split)
-        self.train_generator_flow = GeneratorFlow(train_image_paths, label_dict, input_shape, batch_size, 'training')
-        self.validation_generator_flow = GeneratorFlow(validation_image_paths, label_dict, input_shape, batch_size, 'validation')
+        self.train_generator_flow = GeneratorFlow(train_image_paths, label_dict, input_shape, batch_size)
+        self.validation_generator_flow = GeneratorFlow(validation_image_paths, label_dict, input_shape, batch_size)
 
     def flow(self, subset='training'):
         if subset == 'training':
@@ -66,13 +66,12 @@ class SigmoidClassifierDataGenerator:
 
 
 class GeneratorFlow(tf.keras.utils.Sequence):
-    def __init__(self, image_paths, label_dict, input_shape, batch_size, subset='training'):
+    def __init__(self, image_paths, label_dict, input_shape, batch_size):
         self.image_paths = image_paths
         self.label_dict = label_dict
         self.num_classes = len(self.label_dict)
         self.input_shape = input_shape
         self.batch_size = batch_size
-        self.subset = subset
         self.random_indexes = np.arange(len(self.image_paths))
         self.pool = ThreadPoolExecutor(8)
         np.random.shuffle(self.random_indexes)
