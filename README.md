@@ -1,12 +1,12 @@
 # Sigmoid Classifier
 
-The sigmoid classifier is a classifier that classifies the active function of the output layer by using sigmoid.
+The sigmoid classifier is a classifier that sigmoid output as activation function.
 
-A typical classification model has a softmax avtivation in the last layer and is trained through the cce loss function.
+A typical classification model has a softmax avtivation in the last layer and is trained through the CCE loss function.
 
 It's very good and we're using it a lot.
 
-So why use the sigmoid activation when there is a very good combination of softmax + cce?
+So why use the sigmoid activation when there is a very good combination of softmax + CCE?
 
 ## Unknown class
 
@@ -60,7 +60,7 @@ This is strange.
 
 It's as if they're manipulating the value to make it seem more certain.
 
-On the other hand, I think the values that the models trained with sigmoid and bce output are reliable from a probabilistic perspective.
+On the other hand, I think the values that the models trained with sigmoid and BCE output are reliable from a probabilistic perspective.
 
 This is because the probability of being that class for each class is the same as being a logistic regression.
 
