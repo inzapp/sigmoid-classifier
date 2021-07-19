@@ -16,6 +16,7 @@ class CosineLRDecay(tf.keras.callbacks.Callback):
             validation_data_generator_flow=None):
         self.max_val_recall = 0.0
         self.batch_count = 0
+        self.batch_sum = 0
         self.max_lr = max_lr
         self.min_lr = min_lr
         self.cycle_steps = cycle_steps
@@ -36,6 +37,7 @@ class CosineLRDecay(tf.keras.callbacks.Callback):
         lr = self.min_lr + 0.5 * (self.max_lr - self.min_lr) * (1.0 + np.cos(((1.0 / (0.5 * self.cycle_steps)) * np.pi * self.batch_count) + np.pi))
         tf.keras.backend.set_value(self.model.optimizer.lr, lr)
         self.batch_count += 1
+        self.batch_sum += 1
         if self.batch_count == self.cycle_steps + 1:
             self.batch_count = 0
             self.save_model()
@@ -45,5 +47,5 @@ class CosineLRDecay(tf.keras.callbacks.Callback):
         val_recall = self.model.evaluate(x=self.validation_data_generator_flow, batch_size=self.batch_size, return_dict=True)['recall']
         if val_recall > self.max_val_recall:
             self.max_val_recall = val_recall
-            print(f'{self.batch_count} batch => recall: {recall:.4f}, val_recall: {val_recall:.4f}\n')
-            self.model.save(f'checkpoints/model_{self.batch_count}_batch_recall_{recall:.4f}_val_recall_{val_recall:.4f}.h5')
+            print(f'{self.batch_sum} batch => recall: {recall:.4f}, val_recall: {val_recall:.4f}\n')
+            self.model.save(f'checkpoints/model_{self.batch_sum - 1}_batch_recall_{recall:.4f}_val_recall_{val_recall:.4f}.h5')
