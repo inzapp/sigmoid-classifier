@@ -5,26 +5,23 @@ from glob import glob
 import tensorflow as tf
 
 from generator import SigmoidClassifierDataGenerator
+from live_loss_plot import LiveLossPlot
 from model import Model
-from triangular_cycle_lr import TriangularCycleLR
+from step_lr_decay import StepLRDecay
 
 
 class SigmoidClassifier:
     def __init__(self,
                  train_image_path,
                  input_shape,
-                 max_lr,
-                 min_lr,
-                 cycle_steps,
+                 lr,
                  batch_size,
                  epochs,
                  pretrained_model_path='',
                  validation_image_path='',
                  validation_split=0.2):
         self.input_shape = input_shape
-        self.max_lr = max_lr
-        self.min_lr = min_lr
-        self.cycle_steps = cycle_steps
+        self.lr = lr
         self.batch_size = batch_size
         self.epochs = epochs
 
@@ -49,18 +46,14 @@ class SigmoidClassifier:
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
         else:
             self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
-        self.model.compile(
-            optimizer=tf.keras.optimizers.Adam(lr=self.min_lr),
-            loss=tf.keras.losses.BinaryCrossentropy(),
-            metrics=[tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
 
-        self.callbacks = [TriangularCycleLR(
-            max_lr=self.max_lr,
-            min_lr=self.max_lr,
-            cycle_steps=self.cycle_steps,
-            batch_size=batch_size,
-            train_data_generator_flow=self.train_data_generator.flow(),
-            validation_data_generator_flow=self.validation_data_generator.flow())]
+        self.callbacks = [LiveLossPlot(batch_range=2000)]
+        self.callbacks += [StepLRDecay(lr=self.lr, epochs=self.epochs)]
+        self.callbacks += [tf.keras.callbacks.ModelCheckpoint(
+            filepath='checkpoints/model_epoch_{epoch}_recall_{recall:.4f}_val_recall_{val_recall:.4f}.h5',
+            monitor='val_recall',
+            mode='max',
+            save_best_only=True)]
 
     @staticmethod
     def __init_image_paths(image_path, validation_split=0.0):
@@ -90,9 +83,17 @@ class SigmoidClassifier:
         return train_image_paths, validation_image_paths, class_names
 
     def fit(self):
+        self.model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=self.lr),
+            loss=tf.keras.losses.BinaryCrossentropy(),
+            metrics=[tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
         self.model.summary()
+
+        print(f'\ntrain on {len(self.train_image_paths)} samples')
+        print(f'validate on {len(self.validation_image_paths)} samples\n')
         self.model.fit(
             x=self.train_data_generator.flow(),
+            validation_data=self.validation_data_generator.flow(),
             batch_size=self.batch_size,
             epochs=self.epochs,
             callbacks=self.callbacks)
