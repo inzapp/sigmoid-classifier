@@ -7,8 +7,8 @@ class TriangularCycleLR(tf.keras.callbacks.Callback):
 
     def __init__(
             self,
-            max_lr=0.1,
-            min_lr=1e-4,
+            max_lr=0.01,
+            min_lr=1e-5,
             batch_size=32,
             cycle_steps=2000,
             train_data_generator_flow=None,
@@ -27,11 +27,15 @@ class TriangularCycleLR(tf.keras.callbacks.Callback):
         super().__init__()
 
     def on_train_begin(self, logs=None):
-        tf.keras.backend.set_value(self.model.optimizer.lr, self.min_lr)
+        self.set_lr(self.min_lr)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
     def on_train_batch_end(self, batch, logs=None):
+        self.update(self.model)
+
+    def update(self, model):
+        self.model = model
         self.batch_sum += 1
         self.batch_count += 1
         if self.batch_count == self.cycle_step:
@@ -52,11 +56,14 @@ class TriangularCycleLR(tf.keras.callbacks.Callback):
 
     def increase_lr(self):
         self.lr += self.lr_offset
-        tf.keras.backend.set_value(self.model.optimizer.lr, self.lr)
+        self.set_lr(self.lr)
 
     def decrease_lr(self):
         self.lr -= self.lr_offset
-        tf.keras.backend.set_value(self.model.optimizer.lr, self.lr)
+        self.set_lr(self.lr)
+
+    def set_lr(self, lr):
+        tf.keras.backend.set_value(self.model.optimizer.lr, lr)
 
     def save_model(self):
         recall = self.model.evaluate(x=self.train_data_generator_flow, batch_size=self.batch_size, return_dict=True)['recall']
