@@ -4,12 +4,12 @@ from matplotlib import pyplot as plt
 
 
 class LiveLossPlot(tf.keras.callbacks.Callback):
-    def __init__(self, x_range=1000):
+    def __init__(self, batch_range=1000):
         super().__init__()
         self.fig, self.ax = plt.subplots()
         self.ax.set_ylim(-0.1, 1.0)
-        self.data = [None for _ in range(x_range)]
-        self.values, = self.ax.plot(np.random.rand(x_range))
+        self.data = [None for _ in range(batch_range)]
+        self.values, = self.ax.plot(np.random.rand(batch_range))
         plt.xlabel('Batch range')
         plt.legend(['Loss'])
         plt.tight_layout(pad=1.0)
