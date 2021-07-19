@@ -47,5 +47,5 @@ class CosineLRDecay(tf.keras.callbacks.Callback):
         val_recall = self.model.evaluate(x=self.validation_data_generator_flow, batch_size=self.batch_size, return_dict=True)['recall']
         if val_recall > self.max_val_recall:
             self.max_val_recall = val_recall
-            print(f'{self.batch_sum} batch => recall: {recall:.4f}, val_recall: {val_recall:.4f}\n')
+            print(f'{self.batch_sum - 1} batch => recall: {recall:.4f}, val_recall: {val_recall:.4f}\n')
             self.model.save(f'checkpoints/model_{self.batch_sum - 1}_batch_recall_{recall:.4f}_val_recall_{val_recall:.4f}.h5')
