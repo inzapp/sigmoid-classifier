@@ -8,8 +8,8 @@ class CosineLRDecay(tf.keras.callbacks.Callback):
 
     def __init__(
             self,
-            max_lr=0.01,
-            min_lr=1e-5,
+            max_lr=0.1,
+            min_lr=0.001,
             batch_size=32,
             cycle_steps=2000,
             train_data_generator_flow=None,
@@ -18,8 +18,8 @@ class CosineLRDecay(tf.keras.callbacks.Callback):
         self.batch_sum = 0
         self.max_lr = max_lr
         self.min_lr = min_lr
-        self.cycle_steps = cycle_steps
         self.batch_size = batch_size
+        self.cycle_steps = cycle_steps
         self.train_data_generator_flow = train_data_generator_flow
         self.validation_data_generator_flow = validation_data_generator_flow
         super().__init__()
