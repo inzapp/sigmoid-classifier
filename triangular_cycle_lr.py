@@ -4,7 +4,6 @@ import tensorflow as tf
 
 
 class TriangularCycleLR(tf.keras.callbacks.Callback):
-
     def __init__(
             self,
             max_lr=0.01,

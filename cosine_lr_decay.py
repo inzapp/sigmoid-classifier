@@ -40,11 +40,11 @@ class CosineLRDecay(tf.keras.callbacks.Callback):
 
     def save_model(self):
         if self.train_data_generator_flow is None or self.validation_data_generator_flow is None:
-            self.model.save(f'checkpoints/model_{self.batch_sum}_batch.h5')
+            self.model.save(f'checkpoints/model_{self.batch_sum}_batch.h5', include_optimizer=False)
         else:
-            acc = self.model.evaluate(x=self.train_data_generator_flow, batch_size=self.batch_size, return_dict=True)['categorical_accuracy']
-            val_acc = self.model.evaluate(x=self.validation_data_generator_flow, batch_size=self.batch_size, return_dict=True)['categorical_accuracy']
+            acc = self.model.evaluate(x=self.train_data_generator_flow, batch_size=self.batch_size, return_dict=True)['recall']
+            val_acc = self.model.evaluate(x=self.validation_data_generator_flow, batch_size=self.batch_size, return_dict=True)['recall']
             if val_acc > self.max_val_acc:
                 self.max_val_acc = val_acc
                 print(f'{self.batch_sum} batch => acc: {acc:.4f}, val_acc: {val_acc:.4f}\n')
-                self.model.save(f'checkpoints/model_{self.batch_sum}_batch_acc_{acc:.4f}_val_acc_{val_acc:.4f}.h5')
+                self.model.save(f'checkpoints/model_{self.batch_sum}_batch_acc_{acc:.4f}_val_acc_{val_acc:.4f}.h5', include_optimizer=False)

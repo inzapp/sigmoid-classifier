@@ -77,7 +77,7 @@ class Model:
         x = tf.keras.layers.MaxPool2D()(x)
 
         x = tf.keras.layers.Conv2D(
-            filters=256,
+            filters=128,
             kernel_size=3,
             kernel_initializer='he_uniform',
             padding='same',
@@ -85,14 +85,13 @@ class Model:
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.ReLU()(x)
         x = tf.keras.layers.Conv2D(
-            filters=256,
+            filters=128,
             kernel_size=3,
             kernel_initializer='he_uniform',
             padding='same',
             use_bias=False)(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.ReLU()(x)
-        x = tf.keras.layers.MaxPool2D()(x)
 
         x = tf.keras.layers.Conv2D(
             filters=self.num_classes,
