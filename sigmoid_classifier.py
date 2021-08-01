@@ -10,25 +10,30 @@ from cosine_lr_decay import CosineLRDecay
 from generator import SigmoidClassifierDataGenerator
 from live_loss_plot import LiveLossPlot
 from model import Model
-from step_lr_decay import StepLRDecay
 
 
 class SigmoidClassifier:
     def __init__(self,
                  train_image_path,
                  input_shape,
-                 lr,
+                 max_lr,
+                 min_lr,
+                 burn_in,
+                 cycle_length,
+                 momentum,
                  batch_size,
-                 epochs,
-                 cycle_lr_params=None,
+                 max_batches,
                  pretrained_model_path='',
                  validation_image_path='',
                  validation_split=0.2):
         self.input_shape = input_shape
-        self.lr = lr
+        self.max_lr = max_lr
+        self.min_lr = min_lr
+        self.burn_in = burn_in
+        self.cycle_length = cycle_length
+        self.momentum = momentum
         self.batch_size = batch_size
-        self.epochs = epochs
-        self.cycle_lr_params = cycle_lr_params
+        self.max_batches = max_batches
 
         if validation_image_path != '':
             self.train_image_paths, _, self.class_names = self.__init_image_paths(train_image_path)
@@ -51,24 +56,13 @@ class SigmoidClassifier:
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
         else:
             self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
-
-        self.callbacks = []
-        if self.cycle_lr_params is not None:
-            self.cosine_lr_decay = CosineLRDecay(
-                min_lr=self.cycle_lr_params['min_lr'],
-                max_lr=self.cycle_lr_params['max_lr'],
-                cycle_length=self.cycle_lr_params['cycle_length'],
-                train_data_generator_flow=self.train_data_generator.flow(),
-                validation_data_generator_flow=self.validation_data_generator.flow())
-            self.live_loss_plot = LiveLossPlot()
-        else:
-            self.callbacks += [LiveLossPlot()]
-            self.callbacks += [StepLRDecay(lr=self.lr, epochs=self.epochs)]
-            self.callbacks += [tf.keras.callbacks.ModelCheckpoint(
-                filepath='checkpoints/model_epoch_{epoch}_recall_{recall:.4f}_val_recall_{val_recall:.4f}.h5',
-                monitor='val_recall',
-                mode='max',
-                save_best_only=True)]
+        self.cosine_lr_decay = CosineLRDecay(
+            max_lr=self.max_lr,
+            min_lr=self.min_lr,
+            cycle_length=self.cycle_length,
+            train_data_generator_flow=self.train_data_generator.flow(),
+            validation_data_generator_flow=self.validation_data_generator.flow())
+        self.live_loss_plot = LiveLossPlot()
 
     @staticmethod
     def __init_image_paths(image_path, validation_split=0.0):
@@ -139,28 +133,22 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.compile(
-            optimizer=tf.keras.optimizers.SGD(learning_rate=self.lr, momentum=0.9, nesterov=True),
+            optimizer=tf.keras.optimizers.SGD(learning_rate=self.max_lr, momentum=self.momentum, nesterov=True),
             loss=tf.keras.losses.BinaryCrossentropy(),
             metrics=[tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
         self.model.summary()
+        if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
+            os.makedirs('checkpoints', exist_ok=True)
 
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
-        if self.cycle_lr_params is not None:
-            batch_cnt = 0
-            while True:
-                for batch_x, batch_y in self.train_data_generator.flow():
-                    logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
-                    self.live_loss_plot.update(logs)
-                    self.cosine_lr_decay.update(self.model)
-                    batch_cnt += 1
-                    if batch_cnt == self.cycle_lr_params['train_batches']:
-                        print('train end')
-                        exit(0)
-        else:
-            self.model.fit(
-                x=self.train_data_generator.flow(),
-                validation_data=self.validation_data_generator.flow(),
-                batch_size=self.batch_size,
-                epochs=self.epochs,
-                callbacks=self.callbacks)
+        batch_cnt = 0
+        while True:
+            for batch_x, batch_y in self.train_data_generator.flow():
+                self.cosine_lr_decay.update(self.model)
+                logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
+                self.live_loss_plot.update(logs)
+                batch_cnt += 1
+                if batch_cnt == self.max_batches:
+                    print('train end')
+                    exit(0)
