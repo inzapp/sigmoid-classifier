@@ -91,7 +91,29 @@ class SigmoidClassifier:
         class_names = sorted(list(class_name_set))
         return train_image_paths, validation_image_paths, class_names
 
-    def evaluate(self, unknown_threshold=0.5):
+    def fit(self):
+        self.model.compile(
+            optimizer=tf.keras.optimizers.SGD(learning_rate=self.max_lr, momentum=self.momentum, nesterov=True),
+            loss=tf.keras.losses.BinaryCrossentropy(),
+            metrics=[tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
+        self.model.summary()
+        if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
+            os.makedirs('checkpoints', exist_ok=True)
+
+        print(f'\ntrain on {len(self.train_image_paths)} samples')
+        print(f'validate on {len(self.validation_image_paths)} samples\n')
+        batch_cnt = 0
+        while True:
+            for batch_x, batch_y in self.train_data_generator.flow():
+                self.cosine_lr_decay.update(self.model)
+                logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
+                self.live_loss_plot.update(logs)
+                batch_cnt += 1
+                if batch_cnt == self.max_batches:
+                    print('train end')
+                    exit(0)
+
+    def evaluate(self, unknown_threshold=0.2):
         self.validation_data_generator = SigmoidClassifierDataGenerator(
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
@@ -117,38 +139,16 @@ class SigmoidClassifier:
 
         acc_sum = 0.0
         for i in range(len(total_counts)):
-            cur_class_acc = true_counts[i] / (float(total_counts[i]) + 1e-4)
+            cur_class_acc = true_counts[i] / (float(total_counts[i]) + 1e-5)
             acc_sum += cur_class_acc
             print(f'[class {i:2d}] acc => {cur_class_acc:.4f}')
 
         valid_class_count = len(total_counts)
         if total_unknown_count != 0:
-            unknown_acc = true_unknown_count / float(total_unknown_count + 1e-4)
+            unknown_acc = true_unknown_count / float(total_unknown_count + 1e-5)
             acc_sum += unknown_acc
             valid_class_count += 1
             print(f'[class unknown] acc => {unknown_acc:.4f}')
 
-        acc = acc_sum / (float(valid_class_count) + 1e-4)
+        acc = np.sum(true_counts) / (float(np.sum(total_counts)) + 1e-5)
         print(f'sigmoid classifier accuracy with unknown threshold : {acc:.4f}')
-
-    def fit(self):
-        self.model.compile(
-            optimizer=tf.keras.optimizers.SGD(learning_rate=self.max_lr, momentum=self.momentum, nesterov=True),
-            loss=tf.keras.losses.BinaryCrossentropy(),
-            metrics=[tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
-        self.model.summary()
-        if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
-            os.makedirs('checkpoints', exist_ok=True)
-
-        print(f'\ntrain on {len(self.train_image_paths)} samples')
-        print(f'validate on {len(self.validation_image_paths)} samples\n')
-        batch_cnt = 0
-        while True:
-            for batch_x, batch_y in self.train_data_generator.flow():
-                self.cosine_lr_decay.update(self.model)
-                logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
-                self.live_loss_plot.update(logs)
-                batch_cnt += 1
-                if batch_cnt == self.max_batches:
-                    print('train end')
-                    exit(0)
