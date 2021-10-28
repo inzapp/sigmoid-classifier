@@ -16,10 +16,10 @@ class SigmoidClassifier:
                  train_image_path,
                  input_shape,
                  lr,
-                 decay,
                  momentum,
                  batch_size,
                  max_batches,
+                 decay=0.0,
                  pretrained_model_path='',
                  validation_image_path='',
                  validation_split=0.2):
