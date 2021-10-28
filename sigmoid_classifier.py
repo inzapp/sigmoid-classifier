@@ -16,6 +16,7 @@ class SigmoidClassifier:
                  train_image_path,
                  input_shape,
                  lr,
+                 decay,
                  momentum,
                  batch_size,
                  max_batches,
@@ -49,7 +50,7 @@ class SigmoidClassifier:
         if pretrained_model_path != '':
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
         else:
-            self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
+            self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names), decay=decay).build()
         self.live_loss_plot = LiveLossPlot()
 
     @staticmethod
@@ -108,14 +109,15 @@ class SigmoidClassifier:
                     exit(0)
 
     def save_model(self, iteration_count):
+        print(f'iteration count : {iteration_count}')
         if self.validation_data_generator.flow() is None:
             self.model.save(f'checkpoints/model_{iteration_count}_iter.h5', include_optimizer=False)
         else:
             val_recall = self.model.evaluate(x=self.validation_data_generator.flow(), batch_size=self.batch_size, return_dict=True)['recall']
             if val_recall > self.max_val_recall:
                 self.max_val_recall = val_recall
-                print(f'{iteration_count} iteration => val_recall: {val_recall:.4f}\n')
                 self.model.save(f'checkpoints/model_{iteration_count}_iter_val_recall_{val_recall:.4f}.h5', include_optimizer=False)
+                print(f'[best model saved] {iteration_count} iteration => val_recall: {val_recall:.4f}\n')
 
     def evaluate(self, unknown_threshold=0.2):
         self.validation_data_generator = SigmoidClassifierDataGenerator(
