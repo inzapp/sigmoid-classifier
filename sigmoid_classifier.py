@@ -6,7 +6,6 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from cosine_lr_decay import CosineLRDecay
 from generator import SigmoidClassifierDataGenerator
 from live_loss_plot import LiveLossPlot
 from model import Model
@@ -16,10 +15,7 @@ class SigmoidClassifier:
     def __init__(self,
                  train_image_path,
                  input_shape,
-                 max_lr,
-                 min_lr,
-                 burn_in,
-                 cycle_length,
+                 lr,
                  momentum,
                  batch_size,
                  max_batches,
@@ -27,13 +23,11 @@ class SigmoidClassifier:
                  validation_image_path='',
                  validation_split=0.2):
         self.input_shape = input_shape
-        self.max_lr = max_lr
-        self.min_lr = min_lr
-        self.burn_in = burn_in
-        self.cycle_length = cycle_length
+        self.lr = lr
         self.momentum = momentum
         self.batch_size = batch_size
         self.max_batches = max_batches
+        self.max_val_recall = 0.0
 
         if validation_image_path != '':
             self.train_image_paths, _, self.class_names = self.__init_image_paths(train_image_path)
@@ -56,12 +50,6 @@ class SigmoidClassifier:
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
         else:
             self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
-        self.cosine_lr_decay = CosineLRDecay(
-            max_lr=self.max_lr,
-            min_lr=self.min_lr,
-            cycle_length=self.cycle_length,
-            train_data_generator_flow=self.train_data_generator.flow(),
-            validation_data_generator_flow=self.validation_data_generator.flow())
         self.live_loss_plot = LiveLossPlot()
 
     @staticmethod
@@ -93,7 +81,7 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.compile(
-            optimizer=tf.keras.optimizers.SGD(learning_rate=self.max_lr, momentum=self.momentum, nesterov=True),
+            optimizer=tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum),
             loss=tf.keras.losses.BinaryCrossentropy(),
             metrics=[tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
         self.model.summary()
@@ -102,16 +90,32 @@ class SigmoidClassifier:
 
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
-        batch_cnt = 0
+        iteration_count = 0
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
-                self.cosine_lr_decay.update(self.model)
                 logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
                 self.live_loss_plot.update(logs)
-                batch_cnt += 1
-                if batch_cnt == self.max_batches:
-                    print('train end')
+                iteration_count += 1
+                if iteration_count % 200 == 0:
+                    self.save_model(iteration_count)
+
+                if iteration_count == int(self.max_batches * 0.5):
+                    tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
+                elif iteration_count == int(self.max_batches * 0.8):
+                    tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
+                elif iteration_count == self.max_batches:
+                    print('train end successfully')
                     exit(0)
+
+    def save_model(self, iteration_count):
+        if self.validation_data_generator.flow() is None:
+            self.model.save(f'checkpoints/model_{iteration_count}_iter.h5', include_optimizer=False)
+        else:
+            val_recall = self.model.evaluate(x=self.validation_data_generator.flow(), batch_size=self.batch_size, return_dict=True)['recall']
+            if val_recall > self.max_val_recall:
+                self.max_val_recall = val_recall
+                print(f'{iteration_count} iteration => val_recall: {val_recall:.4f}\n')
+                self.model.save(f'checkpoints/model_{iteration_count}_iter_val_recall_{val_recall:.4f}.h5', include_optimizer=False)
 
     def evaluate(self, unknown_threshold=0.2):
         self.validation_data_generator = SigmoidClassifierDataGenerator(

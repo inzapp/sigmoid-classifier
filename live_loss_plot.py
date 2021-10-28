@@ -8,7 +8,7 @@ class LiveLossPlot(tf.keras.callbacks.Callback):
         super().__init__()
         plt.style.use(['dark_background'])
         self.fig, self.ax = plt.subplots()
-        self.ax.set_ylim(-0.1, 1.0)
+        self.ax.set_ylim(-0.05, 1.0)
         self.data = [np.NaN for _ in range(batch_range)]
         self.values, = self.ax.plot(np.random.rand(batch_range))
         self.recent_values = []
@@ -27,7 +27,7 @@ class LiveLossPlot(tf.keras.callbacks.Callback):
         plt.pause(1e-9)
 
     def get_recent_avg_value(self, logs):
-        if len(self.recent_values) > 20:
+        if len(self.recent_values) > 10:
             self.recent_values.pop(0)
         self.recent_values.append(logs['loss'])
         return np.mean(self.recent_values)
