@@ -19,7 +19,7 @@ class Model:
         x = self.__drop_filter(x, 0.0625)
         x = self.__conv_block(32, 3, x, bn=False)
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(32, 3, x, bn=True)
+        x = self.__conv_block(32, 3, x, bn=False)
         x = self.__avg_max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
