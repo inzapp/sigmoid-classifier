@@ -46,6 +46,11 @@ class SigmoidClassifier:
             input_shape=self.input_shape,
             batch_size=self.batch_size,
             class_names=self.class_names)
+        self.validation_data_generator_one_batch = SigmoidClassifierDataGenerator(
+            image_paths=self.validation_image_paths,
+            input_shape=self.input_shape,
+            batch_size=1,
+            class_names=self.class_names)
 
         if pretrained_model_path != '':
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
@@ -112,19 +117,14 @@ class SigmoidClassifier:
         if self.validation_data_generator.flow() is None:
             self.model.save(f'checkpoints/model_{iteration_count}_iter.h5', include_optimizer=False)
         else:
-            val_acc = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator)
+            val_acc = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
             if val_acc > self.max_val_acc:
                 self.max_val_acc = val_acc
                 self.model.save(f'checkpoints/model_{iteration_count}_iter_val_acc_{val_acc:.4f}.h5', include_optimizer=False)
                 print(f'[best model saved] {iteration_count} iteration => val_acc: {val_acc:.4f}\n')
 
     def evaluate(self, unknown_threshold=0.5):
-        self.validation_data_generator = SigmoidClassifierDataGenerator(
-            image_paths=self.validation_image_paths,
-            input_shape=self.input_shape,
-            batch_size=1,
-            class_names=self.class_names)
-        self.evaluate_core(self, unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator)
+        self.evaluate_core(self, unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator_one_batch)
 
     def evaluate_core(self, unknown_threshold=0.5, validation_data_generator=None):
         num_classes = self.model.output_shape[1]
@@ -133,17 +133,17 @@ class SigmoidClassifier:
         true_unknown_count = total_unknown_count = 0
         for batch_x, batch_y in tqdm(validation_data_generator.flow()):
             y = self.model.predict_on_batch(x=batch_x)[0]
-            # case unknown using zero label
-            if np.sum(batch_y[0]) == 0.0:
+            max_score_index = np.argmax(y)
+            max_score = y[max_score_index]
+            if np.sum(batch_y[0]) == 0.0:  # case unknown using zero label
                 total_unknown_count += 1
-                if np.max(y) < unknown_threshold:
+                if max_score < unknown_threshold:
                     true_unknown_count += 1
-            # case classification
-            else:
-                true_class = np.argmax(batch_y[0])
-                total_counts[true_class] += 1
-                if np.argmax(y) == true_class:
-                    true_counts[true_class] += 1
+            else:  # case classification
+                true_class_index = np.argmax(batch_y[0])
+                total_counts[true_class_index] += 1
+                if max_score_index == true_class_index and max_score >= unknown_threshold:
+                    true_counts[true_class_index] += 1
 
         print('\n')
         acc_sum = 0.0
@@ -152,8 +152,8 @@ class SigmoidClassifier:
             acc_sum += cur_class_acc
             print(f'[class {i:2d}] acc => {cur_class_acc:.4f}')
 
-        valid_class_count = len(total_counts)
-        if total_unknown_count != 0:
+        valid_class_count = num_classes
+        if total_unknown_count > 0:
             unknown_acc = true_unknown_count / float(total_unknown_count + 1e-5)
             acc_sum += unknown_acc
             valid_class_count += 1
