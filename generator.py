@@ -56,4 +56,7 @@ class GeneratorFlow(tf.keras.utils.Sequence):
         np.random.shuffle(self.random_indexes)
 
     def _load_img(self, path):
-        return path, cv2.imread(path, cv2.IMREAD_GRAYSCALE if self.input_shape[2] == 1 else cv2.IMREAD_COLOR)
+        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE if self.input_shape[2] == 1 else cv2.IMREAD_COLOR)
+        if self.input_shape[2] == 3:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # rb swap
+        return path, img
