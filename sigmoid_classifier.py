@@ -28,7 +28,7 @@ class SigmoidClassifier:
         self.momentum = momentum
         self.batch_size = batch_size
         self.max_batches = max_batches
-        self.max_val_recall = 0.0
+        self.max_val_acc = 0.0
 
         if validation_image_path != '':
             self.train_image_paths, _, self.class_names = self.__init_image_paths(train_image_path)
@@ -67,7 +67,7 @@ class SigmoidClassifier:
             dir_name = dir_path.split('/')[-1]
             if dir_name != 'unknown':
                 class_name_set.add(dir_name)
-            cur_class_image_paths = glob(f'{dir_path}/*.jpg') + glob(f'{dir_path}/*.png')
+            cur_class_image_paths = glob(f'{dir_path}/*.jpg')
             for i in range(len(cur_class_image_paths)):
                 cur_class_image_paths[i] = cur_class_image_paths[i].replace('\\', '/')
             if validation_split == 0.0:
@@ -83,9 +83,7 @@ class SigmoidClassifier:
     def fit(self):
         self.model.compile(
             optimizer=tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum),
-            loss=tf.keras.losses.BinaryCrossentropy(),
-            metrics=[tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
-        self.model.summary()
+            loss=tf.keras.losses.BinaryCrossentropy())
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
@@ -97,12 +95,13 @@ class SigmoidClassifier:
                 logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
                 self.live_loss_plot.update(logs)
                 iteration_count += 1
-                if iteration_count % 200 == 0:
-                    self.save_model(iteration_count)
+                print(f'\r[iteration count : {iteration_count:6d}] loss => {logs["loss"]:.4f}', end='')
 
-                if iteration_count == int(self.max_batches * 0.5):
+                if iteration_count % 500 == 0:
+                    self.save_model(iteration_count)
+                if iteration_count == int(self.max_batches * 0.8):
                     tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
-                elif iteration_count == int(self.max_batches * 0.8):
+                elif iteration_count == int(self.max_batches * 0.9):
                     tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
                 elif iteration_count == self.max_batches:
                     print('train end successfully')
@@ -113,23 +112,26 @@ class SigmoidClassifier:
         if self.validation_data_generator.flow() is None:
             self.model.save(f'checkpoints/model_{iteration_count}_iter.h5', include_optimizer=False)
         else:
-            val_recall = self.model.evaluate(x=self.validation_data_generator.flow(), batch_size=self.batch_size, return_dict=True)['recall']
-            if val_recall > self.max_val_recall:
-                self.max_val_recall = val_recall
-                self.model.save(f'checkpoints/model_{iteration_count}_iter_val_recall_{val_recall:.4f}.h5', include_optimizer=False)
-                print(f'[best model saved] {iteration_count} iteration => val_recall: {val_recall:.4f}\n')
+            val_acc = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator)
+            if val_acc > self.max_val_acc:
+                self.max_val_acc = val_acc
+                self.model.save(f'checkpoints/model_{iteration_count}_iter_val_acc_{val_acc:.4f}.h5', include_optimizer=False)
+                print(f'[best model saved] {iteration_count} iteration => val_acc: {val_acc:.4f}\n')
 
-    def evaluate(self, unknown_threshold=0.2):
+    def evaluate(self, unknown_threshold=0.5):
         self.validation_data_generator = SigmoidClassifierDataGenerator(
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
             class_names=self.class_names)
+        self.evaluate_core(self, unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator)
+
+    def evaluate_core(self, unknown_threshold=0.5, validation_data_generator=None):
         num_classes = self.model.output_shape[1]
         true_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         total_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         true_unknown_count = total_unknown_count = 0
-        for batch_x, batch_y in tqdm(self.validation_data_generator.flow()):
+        for batch_x, batch_y in tqdm(validation_data_generator.flow()):
             y = self.model.predict_on_batch(x=batch_x)[0]
             # case unknown using zero label
             if np.sum(batch_y[0]) == 0.0:
@@ -143,6 +145,7 @@ class SigmoidClassifier:
                 if np.argmax(y) == true_class:
                     true_counts[true_class] += 1
 
+        print('\n')
         acc_sum = 0.0
         for i in range(len(total_counts)):
             cur_class_acc = true_counts[i] / (float(total_counts[i]) + 1e-5)
@@ -156,5 +159,6 @@ class SigmoidClassifier:
             valid_class_count += 1
             print(f'[class unknown] acc => {unknown_acc:.4f}')
 
-        acc = np.sum(true_counts) / (float(np.sum(total_counts)) + 1e-5)
+        acc = acc_sum / valid_class_count
         print(f'sigmoid classifier accuracy with unknown threshold : {acc:.4f}')
+        return acc
