@@ -16,6 +16,7 @@ class SigmoidClassifier:
                  train_image_path,
                  input_shape,
                  lr,
+                 burn_in,
                  momentum,
                  batch_size,
                  max_batches,
@@ -25,6 +26,7 @@ class SigmoidClassifier:
                  validation_split=0.2):
         self.input_shape = input_shape
         self.lr = lr
+        self.burn_in = burn_in
         self.momentum = momentum
         self.batch_size = batch_size
         self.max_batches = max_batches
@@ -87,7 +89,7 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.compile(
-            optimizer=tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum),
+            optimizer=tf.keras.optimizers.SGD(lr=0.0, momentum=self.momentum, nesterov=True),
             loss=tf.keras.losses.BinaryCrossentropy())
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
@@ -98,13 +100,16 @@ class SigmoidClassifier:
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
                 logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
-                self.live_loss_plot.update(logs)
+                # self.live_loss_plot.update(logs)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {logs["loss"]:.4f}', end='')
 
-                if iteration_count % 500 == 0:
+                if iteration_count > int(self.max_batches * 0.8) and iteration_count % 1000 == 0:
                     self.save_model(iteration_count)
-                if iteration_count == int(self.max_batches * 0.8):
+                if iteration_count < self.burn_in:
+                    lr = self.lr * pow(float(iteration_count) / self.burn_in, 4)
+                    tf.keras.backend.set_value(self.model.optimizer.lr, lr)
+                elif iteration_count == int(self.max_batches * 0.8):
                     tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
                 elif iteration_count == int(self.max_batches * 0.9):
                     tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
