@@ -87,10 +87,17 @@ class SigmoidClassifier:
         class_names = sorted(list(class_name_set))
         return train_image_paths, validation_image_paths, class_names
 
+    @tf.function
+    def compute_gradient(self, model, optimizer, batch_x, batch_y):
+        with tf.GradientTape() as tape:
+            y = self.model(batch_x, training=True)
+            loss = tf.keras.losses.BinaryCrossentropy()(batch_y, y)
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        return loss
+
     def fit(self):
-        self.model.compile(
-            optimizer=tf.keras.optimizers.SGD(lr=0.0, momentum=self.momentum, nesterov=True),
-            loss=tf.keras.losses.BinaryCrossentropy())
+        optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
@@ -99,21 +106,13 @@ class SigmoidClassifier:
         iteration_count = 0
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
-                logs = self.model.train_on_batch(batch_x, batch_y, return_dict=True)
+                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
                 # self.live_loss_plot.update(logs)
                 iteration_count += 1
-                print(f'\r[iteration count : {iteration_count:6d}] loss => {logs["loss"]:.4f}', end='')
-
+                print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count > int(self.max_batches * 0.8) and iteration_count % 1000 == 0:
                     self.save_model(iteration_count)
-                if iteration_count < self.burn_in:
-                    lr = self.lr * pow(float(iteration_count) / self.burn_in, 4)
-                    tf.keras.backend.set_value(self.model.optimizer.lr, lr)
-                elif iteration_count == int(self.max_batches * 0.8):
-                    tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
-                elif iteration_count == int(self.max_batches * 0.9):
-                    tf.keras.backend.set_value(self.model.optimizer.lr, self.model.optimizer.lr * 0.1)
-                elif iteration_count == self.max_batches:
+                if iteration_count == self.max_batches:
                     print('train end successfully')
                     exit(0)
 
@@ -132,12 +131,15 @@ class SigmoidClassifier:
         self.evaluate_core(self, unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator_one_batch)
 
     def evaluate_core(self, unknown_threshold=0.5, validation_data_generator=None):
+        @tf.function
+        def predict(model, x):
+            return model(x, training=False)
         num_classes = self.model.output_shape[1]
         true_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         total_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         true_unknown_count = total_unknown_count = 0
         for batch_x, batch_y in tqdm(validation_data_generator.flow()):
-            y = self.model.predict_on_batch(x=batch_x)[0]
+            y = predict(self.model, batch_x)[0]
             max_score_index = np.argmax(y)
             max_score = y[max_score_index]
             if np.sum(batch_y[0]) == 0.0:  # case unknown using zero label
