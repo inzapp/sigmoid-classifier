@@ -38,16 +38,19 @@ class SigmoidClassifier:
             self.train_image_paths, self.validation_image_paths, self.class_names = self.__init_image_paths(train_image_path, validation_split)
 
         self.train_data_generator = SigmoidClassifierDataGenerator(
+            root_path=train_image_path,
             image_paths=self.train_image_paths,
             input_shape=self.input_shape,
             batch_size=self.batch_size,
             class_names=self.class_names)
         self.validation_data_generator = SigmoidClassifierDataGenerator(
+            root_path=validation_image_path,
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=self.batch_size,
             class_names=self.class_names)
         self.validation_data_generator_one_batch = SigmoidClassifierDataGenerator(
+            root_path=train_image_path if validation_image_path == '' else validation_image_path,
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
@@ -73,7 +76,7 @@ class SigmoidClassifier:
             dir_name = dir_path.split('/')[-1]
             if dir_name != 'unknown':
                 class_name_set.add(dir_name)
-            cur_class_image_paths = glob(f'{dir_path}/*.jpg')
+            cur_class_image_paths = glob(f'{dir_path}/**/*.jpg', recursive=True)
             for i in range(len(cur_class_image_paths)):
                 cur_class_image_paths[i] = cur_class_image_paths[i].replace('\\', '/')
             if validation_split == 0.0:
@@ -84,6 +87,7 @@ class SigmoidClassifier:
             train_image_paths += cur_class_image_paths[:num_cur_class_train_images]
             validation_image_paths += cur_class_image_paths[num_cur_class_train_images:]
         class_names = sorted(list(class_name_set))
+        np.random.shuffle(validation_image_paths)
         return train_image_paths, validation_image_paths, class_names
 
     @tf.function

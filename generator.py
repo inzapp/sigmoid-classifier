@@ -7,15 +7,18 @@ from tensorflow.python.keras.utils.np_utils import to_categorical
 
 
 class SigmoidClassifierDataGenerator:
-    def __init__(self, image_paths, input_shape, batch_size, class_names):
-        self.generator_flow = GeneratorFlow(image_paths, class_names, input_shape, batch_size)
+    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names):
+        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size)
 
     def flow(self):
         return self.generator_flow
 
 
 class GeneratorFlow(tf.keras.utils.Sequence):
-    def __init__(self, image_paths, class_names, input_shape, batch_size):
+    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size):
+        self.root_path = root_path.replace('\\', '/')
+        if self.root_path.endswith('/'):
+            self.root_path = self.root_path[len(self.root_path) - 1]
         self.image_paths = image_paths
         self.class_names = class_names
         self.num_classes = len(self.class_names)
@@ -39,7 +42,7 @@ class GeneratorFlow(tf.keras.utils.Sequence):
             x = np.asarray(x).reshape(self.input_shape).astype('float32') / 255.0
             batch_x.append(x)
 
-            dir_name = cur_img_path.split('/')[-2]
+            dir_name = cur_img_path.replace(self.root_path, '').split('/')[1]
             if dir_name == 'unknown':
                 y = np.zeros((self.num_classes,), dtype=np.float32)
             else:
