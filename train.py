@@ -10,4 +10,4 @@ if __name__ == '__main__':
         burn_in=1000,
         momentum=0.9,
         batch_size=32,
-        max_batches=1000000).fit()
+        iterations=1000000).fit()

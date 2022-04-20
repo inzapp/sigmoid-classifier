@@ -4,6 +4,7 @@ from glob import glob
 
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras.backend as K
 from tqdm import tqdm
 
 from generator import SigmoidClassifierDataGenerator
@@ -19,7 +20,7 @@ class SigmoidClassifier:
                  burn_in,
                  momentum,
                  batch_size,
-                 max_batches,
+                 iterations,
                  decay=0.0,
                  pretrained_model_path='',
                  validation_image_path='',
@@ -29,7 +30,7 @@ class SigmoidClassifier:
         self.burn_in = burn_in
         self.momentum = momentum
         self.batch_size = batch_size
-        self.max_batches = max_batches
+        self.iterations = iterations
         self.max_val_acc = 0.0
 
         if validation_image_path != '':
@@ -88,13 +89,20 @@ class SigmoidClassifier:
         return train_image_paths, validation_image_paths, class_names
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, batch_y):
+    def compute_gradient(self, model, optimizer, batch_x, y_true):
         with tf.GradientTape() as tape:
-            y = self.model(batch_x, training=True)
-            loss = tf.keras.losses.BinaryCrossentropy()(batch_y, y)
+            y_pred = self.model(batch_x, training=True)
+            p_t = tf.where(K.equal(y_true, 1.0), y_pred, 1.0 - y_pred)
+            alpha_factor = K.ones_like(y_true) * 0.25
+            alpha_t = tf.where(K.equal(y_true, 1.0), alpha_factor, 1.0 - alpha_factor)
+            cross_entropy = K.binary_crossentropy(y_true, y_pred)
+            weight = alpha_t * K.pow((1.0 - p_t), 2.0)
+            loss = weight * cross_entropy
+            loss = tf.reduce_mean(loss, axis=0)
+            mean_loss = tf.reduce_mean(loss)
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return loss
+        return mean_loss
 
     def fit(self):
         optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
@@ -110,9 +118,9 @@ class SigmoidClassifier:
                 # self.live_loss_plot.update(logs)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
-                if iteration_count > int(self.max_batches * 0.8) and iteration_count % 1000 == 0:
+                if iteration_count % 5000 == 0:
                     self.save_model(iteration_count)
-                if iteration_count == self.max_batches:
+                if iteration_count == self.iterations:
                     print('train end successfully')
                     exit(0)
 
