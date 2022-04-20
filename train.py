@@ -7,7 +7,6 @@ if __name__ == '__main__':
         input_shape=(224, 224, 1),
         lr=0.001,
         decay=0.0005,
-        burn_in=1000,
         momentum=0.9,
         batch_size=32,
         iterations=1000000).fit()

@@ -17,7 +17,6 @@ class SigmoidClassifier:
                  train_image_path,
                  input_shape,
                  lr,
-                 burn_in,
                  momentum,
                  batch_size,
                  iterations,
@@ -27,7 +26,6 @@ class SigmoidClassifier:
                  validation_split=0.2):
         self.input_shape = input_shape
         self.lr = lr
-        self.burn_in = burn_in
         self.momentum = momentum
         self.batch_size = batch_size
         self.iterations = iterations
