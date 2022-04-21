@@ -109,6 +109,8 @@ class SigmoidClassifier:
             if not os.path.isdir(dir_path):
                 continue
             dir_name = dir_path.split('/')[-1]
+            if dir_name[0] == '_':
+                continue
             if dir_name != 'unknown':
                 class_name_set.add(dir_name)
             cur_class_image_paths = glob(f'{dir_path}/**/*.jpg', recursive=True)
