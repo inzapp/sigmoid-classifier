@@ -31,6 +31,9 @@ class SigmoidClassifier:
         self.iterations = iterations
         self.max_val_acc = 0.0
 
+        train_image_path = self.unify_path(train_image_path)
+        validation_image_path = self.unify_path(validation_image_path)
+
         if validation_image_path != '':
             self.train_image_paths, _, self.class_names = self.__init_image_paths(train_image_path)
             self.validation_image_paths, _, self.class_names = self.__init_image_paths(validation_image_path)
@@ -39,7 +42,7 @@ class SigmoidClassifier:
 
         self.train_data_generator = SigmoidClassifierDataGenerator(
             root_path=train_image_path,
-            image_paths=self.train_image_paths,
+            image_paths=self.balance_class(train_image_path, self.train_image_paths),
             input_shape=self.input_shape,
             batch_size=self.batch_size,
             class_names=self.class_names)
@@ -61,6 +64,38 @@ class SigmoidClassifier:
         else:
             self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names), decay=decay).build()
         self.live_loss_plot = LiveLossPlot()
+
+    def unify_path(self, path):
+        if path == '':
+            return path
+        path = path.replace('\\', '/')
+        if path.endswith('/'):
+            path = path[len(self.root_path) - 1]
+        return path
+
+    def balance_class(self, root_path, paths):
+        d = {}
+        for path in paths:
+            dir_name = path.replace(root_path, '').split('/')[1]
+            try:
+                d[dir_name].append(path)
+            except KeyError:
+                d[dir_name] = [path]
+        max_length = -1
+        for key in list(d.keys()):
+            if len(d[key]) > max_length:
+                max_length = len(d[key])
+        for key in list(d.keys()):
+            class_path_length = len(d[key])
+            if class_path_length < max_length:
+                for i in range(max_length - class_path_length):
+                    random_index = np.random.randint(class_path_length)
+                    d[key].append(d[key][random_index])
+        new_paths = []
+        for key in list(d.keys()):
+            for class_image_path in d[key]:
+                new_paths.append(class_image_path)
+        return new_paths
 
     @staticmethod
     def __init_image_paths(image_path, validation_split=0.0):
@@ -107,6 +142,7 @@ class SigmoidClassifier:
         return mean_loss
 
     def fit(self):
+        self.model.summary()
         optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
@@ -138,7 +174,7 @@ class SigmoidClassifier:
                 print(f'[best model saved] {iteration_count} iteration => val_acc: {val_acc:.4f}\n')
 
     def evaluate(self, unknown_threshold=0.5):
-        self.evaluate_core(self, unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator_one_batch)
+        self.evaluate_core(unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator_one_batch)
 
     def evaluate_core(self, unknown_threshold=0.5, validation_data_generator=None):
         @tf.function
@@ -177,5 +213,5 @@ class SigmoidClassifier:
             print(f'[class unknown] acc => {unknown_acc:.4f}')
 
         acc = acc_sum / valid_class_count
-        print(f'sigmoid classifier accuracy with unknown threshold : {acc:.4f}')
+        print(f'sigmoid classifier accuracy with unknown threshold({unknown_threshold:.2f}) : {acc:.4f}')
         return acc

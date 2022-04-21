@@ -16,9 +16,7 @@ class SigmoidClassifierDataGenerator:
 
 class GeneratorFlow(tf.keras.utils.Sequence):
     def __init__(self, root_path, image_paths, class_names, input_shape, batch_size):
-        self.root_path = root_path.replace('\\', '/')
-        if self.root_path.endswith('/'):
-            self.root_path = self.root_path[len(self.root_path) - 1]
+        self.root_path = root_path
         self.image_paths = image_paths
         self.class_names = class_names
         self.num_classes = len(self.class_names)
