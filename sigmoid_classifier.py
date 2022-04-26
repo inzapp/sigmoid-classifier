@@ -1,11 +1,10 @@
 import os
-import random
 from glob import glob
+from tqdm import tqdm
 
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-from tqdm import tqdm
 
 from generator import SigmoidClassifierDataGenerator
 from live_loss_plot import LiveLossPlot
@@ -119,7 +118,7 @@ class SigmoidClassifier:
             if validation_split == 0.0:
                 train_image_paths += cur_class_image_paths
                 continue
-            random.shuffle(cur_class_image_paths)
+            np.random.shuffle(cur_class_image_paths)
             num_cur_class_train_images = int(len(cur_class_image_paths) * (1.0 - validation_split))
             train_image_paths += cur_class_image_paths[:num_cur_class_train_images]
             validation_image_paths += cur_class_image_paths[num_cur_class_train_images:]
