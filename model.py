@@ -13,48 +13,42 @@ class Model:
 
     def build(self):
         input_layer = tf.keras.layers.Input(shape=self.input_shape)
-        x = self.__conv_block(16, 3, input_layer, bn=True)
-        x = self.__avg_max_pool(x)
+        x = self.__conv_block(16, 3, input_layer, bn=False)
+        x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
         x = self.__conv_block(32, 3, x, bn=False)
-        x = self.__avg_max_pool(x)
+        x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
         x = self.__conv_block(64, 3, x, bn=False)
-        x = self.__avg_max_pool(x)
+        x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(128, 3, x, bn=True)
-        x = self.__avg_max_pool(x)
+        x = self.__conv_block(128, 3, x, bn=False)
+        x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(256, 3, x, bn=True)
-        x = self.__avg_max_pool(x)
+        x = self.__conv_block(256, 3, x, bn=False)
+        x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(256, 3, x, bn=True)
-        x = self.__classification_layer(x)
-        return tf.keras.models.Model(input_layer, x)
+        x = self.__conv_block(256, 3, x, bn=False)
+        y = self.__classification_layer(x)
+        return tf.keras.models.Model(input_layer, y)
 
-    def __conv_block(self, filters, kernel_size, x, activation_first=False, bn=True):
+    def __conv_block(self, filters, kernel_size, x, bn=True):
         x = self.__conv(x, filters, kernel_size, use_bias=False if bn else True)
-        if activation_first:
-            x = tf.keras.layers.ReLU()(x)
-            if bn:
-                x = tf.keras.layers.BatchNormalization()(x)
-        else:
-            if bn:
-                x = tf.keras.layers.BatchNormalization()(x)
-            x = tf.keras.layers.ReLU()(x)
+        if bn:
+            x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Activation('relu')(x)
         return x
 
     def __conv(self, x, filters, kernel_size, use_bias=True):
         return tf.keras.layers.Conv2D(
             filters=filters,
             kernel_size=kernel_size,
-            kernel_initializer=tf.keras.initializers.he_uniform(),
-            bias_initializer=tf.keras.initializers.zeros(),
+            kernel_initializer='he_normal',
             padding='same',
             use_bias=use_bias,
             kernel_regularizer=tf.keras.regularizers.l2(l2=self.decay) if self.decay > 0.0 else None)(x)
@@ -63,15 +57,12 @@ class Model:
         x = tf.keras.layers.Conv2D(
             filters=self.num_classes,
             kernel_size=1,
-            activation='sigmoid',
-            name=name)(x)
-        return tf.keras.layers.GlobalAveragePooling2D()(x)
+            kernel_initializer='glorot_normal',
+            activation='sigmoid')(x)
+        return tf.keras.layers.GlobalAveragePooling2D(name=name)(x)
 
-    @staticmethod
-    def __avg_max_pool(x):
-        ap = tf.keras.layers.AvgPool2D()(x)
-        mp = tf.keras.layers.MaxPool2D()(x)
-        return tf.keras.layers.Add()([ap, mp])
+    def __max_pool(self, x):
+        return tf.keras.layers.MaxPool2D()(x)
 
     @staticmethod
     def __drop_filter(x, rate):
