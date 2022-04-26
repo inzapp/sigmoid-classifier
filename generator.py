@@ -3,7 +3,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 import numpy as np
 import tensorflow as tf
 from cv2 import cv2
-from tensorflow.python.keras.utils.np_utils import to_categorical
 
 
 class SigmoidClassifierDataGenerator:
@@ -41,10 +40,9 @@ class GeneratorFlow(tf.keras.utils.Sequence):
             batch_x.append(x)
 
             dir_name = cur_img_path.replace(self.root_path, '').split('/')[1]
-            if dir_name == 'unknown':
-                y = np.zeros((self.num_classes,), dtype=np.float32)
-            else:
-                y = to_categorical(self.class_names.index(dir_name), self.num_classes)
+            y = np.zeros((self.num_classes,), dtype=np.float32)
+            if dir_name != 'unknown':
+                y[self.class_names.index(dir_name)] = 1.0
             batch_y.append(y)
         batch_x = np.asarray(batch_x).reshape((self.batch_size,) + self.input_shape).astype('float32')
         batch_y = np.asarray(batch_y).reshape((self.batch_size, self.num_classes)).astype('float32')
