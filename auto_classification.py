@@ -8,14 +8,14 @@ import tensorflow as tf
 from cv2 import cv2
 from tqdm import tqdm
 
-os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 g_unknown_threshold = 0.5
-g_save_unknown_class = True
 
 
 def load_x_image_path(image_path, color_mode, input_size, input_shape):
-    x = cv2.imread(image_path, color_mode)
+    data = np.fromfile(image_path, dtype=np.uint8)
+    x = cv2.imdecode(data, color_mode)
     x = cv2.resize(x, input_size)
     if input_shape[-1] == 3:
         x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)  # swap rb
@@ -42,7 +42,7 @@ def auto_classification(model_path, image_path):
         y = model.predict_on_batch(x=x)[0]
         class_index = np.argmax(y)
         score = y[class_index]
-        if score < g_unknown_threshold and g_save_unknown_class:
+        if score < g_unknown_threshold:
             save_dir = f'{save_path}/unknown'
             os.makedirs(save_dir, exist_ok=True)
             sh.move(image_path, save_dir)
