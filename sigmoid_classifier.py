@@ -110,6 +110,7 @@ class SigmoidClassifier:
                 continue
             dir_name = dir_path.split('/')[-1]
             if dir_name[0] == '_':
+                print(f'class dir {dir_name} is ignored. dir_name[0] == "_"')
                 continue
             if dir_name != 'unknown':
                 class_name_set.add(dir_name)
@@ -131,12 +132,7 @@ class SigmoidClassifier:
     def compute_gradient(self, model, optimizer, batch_x, y_true):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
-            p_t = tf.where(K.equal(y_true, 1.0), y_pred, 1.0 - y_pred)
-            alpha_factor = K.ones_like(y_true) * 0.25
-            alpha_t = tf.where(K.equal(y_true, 1.0), alpha_factor, 1.0 - alpha_factor)
-            cross_entropy = K.binary_crossentropy(y_true, y_pred)
-            weight = alpha_t * K.pow((1.0 - p_t), 2.0)
-            loss = weight * cross_entropy
+            loss = K.binary_crossentropy(y_true, y_pred)
             loss = tf.reduce_mean(loss, axis=0)
             mean_loss = tf.reduce_mean(loss)
         gradients = tape.gradient(loss, model.trainable_variables)
@@ -155,10 +151,10 @@ class SigmoidClassifier:
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
                 loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
-                # self.live_loss_plot.update(logs)
+                # self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
-                if iteration_count % 5000 == 0:
+                if iteration_count % 2000 == 0:
                     self.save_model(iteration_count)
                 if iteration_count == self.iterations:
                     print('train end successfully')
@@ -172,8 +168,10 @@ class SigmoidClassifier:
             val_acc = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
             if val_acc > self.max_val_acc:
                 self.max_val_acc = val_acc
-                self.model.save(f'checkpoints/model_{iteration_count}_iter_val_acc_{val_acc:.4f}.h5', include_optimizer=False)
+                self.model.save(f'checkpoints/best_model_{iteration_count}_iter_val_acc_{val_acc:.4f}.h5', include_optimizer=False)
                 print(f'[best model saved] {iteration_count} iteration => val_acc: {val_acc:.4f}\n')
+            else:
+                self.model.save(f'checkpoints/model_{iteration_count}_iter_val_acc_{val_acc:.4f}.h5', include_optimizer=False)
 
     def evaluate(self, unknown_threshold=0.5):
         self.evaluate_core(unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator_one_batch)
@@ -188,6 +186,8 @@ class SigmoidClassifier:
         true_unknown_count = total_unknown_count = 0
         for batch_x, batch_y in tqdm(validation_data_generator.flow()):
             y = predict(self.model, batch_x)[0]
+            # with np.printoptions(precision=2, suppress=True):
+            #     print(np.asarray(y))
             max_score_index = np.argmax(y)
             max_score = y[max_score_index]
             if np.sum(batch_y[0]) == 0.0:  # case unknown using zero label
