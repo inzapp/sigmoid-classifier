@@ -35,10 +35,10 @@ class SigmoidClassifier:
         validation_image_path = self.unify_path(validation_image_path)
 
         if validation_image_path != '':
-            self.train_image_paths, _, self.class_names = self.__init_image_paths(train_image_path)
-            self.validation_image_paths, _, self.class_names = self.__init_image_paths(validation_image_path)
+            self.train_image_paths, _, self.class_names = self.init_image_paths(train_image_path)
+            self.validation_image_paths, _, self.class_names = self.init_image_paths(validation_image_path)
         else:
-            self.train_image_paths, self.validation_image_paths, self.class_names = self.__init_image_paths(train_image_path, validation_split)
+            self.train_image_paths, self.validation_image_paths, self.class_names = self.init_image_paths(train_image_path, validation_split)
 
         self.train_data_generator = SigmoidClassifierDataGenerator(
             root_path=train_image_path,
@@ -97,8 +97,7 @@ class SigmoidClassifier:
                 new_paths.append(class_image_path)
         return new_paths
 
-    @staticmethod
-    def __init_image_paths(image_path, validation_split=0.0):
+    def init_image_paths(self, image_path, validation_split=0.0):
         dir_paths = sorted(glob(f'{image_path}/*'))
         for i in range(len(dir_paths)):
             dir_paths[i] = dir_paths[i].replace('\\', '/')
