@@ -168,7 +168,7 @@ class SigmoidClassifier:
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
                 loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
-                # self.live_loss_plot.update(loss)
+                self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count % 2000 == 0:
