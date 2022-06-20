@@ -73,8 +73,17 @@ class GeneratorFlow(tf.keras.utils.Sequence):
     def on_epoch_end(self):
         np.random.shuffle(self.random_indexes)
 
+    def random_blur(self, img):
+        if np.random.rand() > 0.5:
+            if np.random.rand() > 0.5:
+                img = cv2.GaussianBlur(img, (3, 3), 0)
+            else:
+                img = cv2.blur(img, (2, 2))
+        return img
+
     def _load_img(self, path):
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE if self.input_shape[2] == 1 else cv2.IMREAD_COLOR)
         if self.input_shape[-1] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # swap rb
+        img = self.random_blur(img)
         return path, img
