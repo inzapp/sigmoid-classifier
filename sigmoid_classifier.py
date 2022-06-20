@@ -38,7 +38,6 @@ class SigmoidClassifier:
                  momentum,
                  batch_size,
                  iterations,
-                 decay=0.0,
                  pretrained_model_path='',
                  validation_image_path='',
                  validation_split=0.2):
@@ -80,7 +79,8 @@ class SigmoidClassifier:
         if pretrained_model_path != '':
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
         else:
-            self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names), decay=decay).build()
+            self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
+            self.model.save('model.h5', include_optimizer=False)
         self.live_loss_plot = LiveLossPlot()
 
     def unify_path(self, path):
@@ -146,19 +146,19 @@ class SigmoidClassifier:
         return train_image_paths, validation_image_paths, class_names
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, y_true):
+    def compute_gradient(self, model, optimizer, batch_x, y_true, lr):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
             loss = K.binary_crossentropy(y_true, y_pred)
             loss = tf.reduce_mean(loss, axis=0)
             mean_loss = tf.reduce_mean(loss)
-        gradients = tape.gradient(loss, model.trainable_variables)
+            gradients = tape.gradient(loss * lr, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return mean_loss
 
     def fit(self):
         self.model.summary()
-        optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
+        optimizer = tf.keras.optimizers.SGD(lr=1.0, momentum=self.momentum, nesterov=True)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
@@ -167,7 +167,8 @@ class SigmoidClassifier:
         iteration_count = 0
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
-                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
+                lr = self.lr * pow(iteration_count / 1000.0, 4) if iteration_count < 1000 else self.lr
+                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, tf.constant(lr))
                 self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')

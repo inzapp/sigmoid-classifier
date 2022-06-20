@@ -25,10 +25,9 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
 
 class Model:
-    def __init__(self, input_shape, num_classes, decay):
+    def __init__(self, input_shape, num_classes):
         self.input_shape = input_shape
         self.num_classes = num_classes
-        self.decay = decay
 
     def build(self):
         input_layer = tf.keras.layers.Input(shape=self.input_shape)
@@ -69,8 +68,7 @@ class Model:
             kernel_size=kernel_size,
             kernel_initializer='he_normal',
             padding='same',
-            use_bias=use_bias,
-            kernel_regularizer=tf.keras.regularizers.l2(l2=self.decay) if self.decay > 0.0 else None)(x)
+            use_bias=use_bias)(x)
 
     def __classification_layer(self, x, name='output'):
         x = tf.keras.layers.Conv2D(
