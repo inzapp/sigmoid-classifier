@@ -174,6 +174,8 @@ class SigmoidClassifier:
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count % 2000 == 0:
                     self.save_model(iteration_count)
+                if iteration_count in [int(self.iterations * 0.8), int(self.iterations * 0.9)]:
+                    self.lr *= 0.25
                 if iteration_count == self.iterations:
                     print('train end successfully')
                     exit(0)
