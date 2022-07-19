@@ -26,7 +26,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 
 from generator import SigmoidClassifierDataGenerator
-from live_loss_plot import LiveLossPlot
+from live_plot import LivePlot
 from model import Model
 
 
@@ -81,7 +81,7 @@ class SigmoidClassifier:
         else:
             self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
             self.model.save('model.h5', include_optimizer=False)
-        self.live_loss_plot = LiveLossPlot()
+        self.live_plot = LivePlot()
 
     def unify_path(self, path):
         if path == '':
@@ -169,10 +169,10 @@ class SigmoidClassifier:
             for batch_x, batch_y in self.train_data_generator.flow():
                 lr = self.lr * pow(iteration_count / 1000.0, 4) if iteration_count < 1000 else self.lr
                 loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, tf.constant(lr))
-                self.live_loss_plot.update(loss)
+                self.live_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
-                if iteration_count % 2000 == 0:
+                if iteration_count > int(self.iterations * 0.8) and iteration_count % 2000 == 0:
                     self.save_model(iteration_count)
                 if iteration_count in [int(self.iterations * 0.8), int(self.iterations * 0.9)]:
                     self.lr *= 0.25

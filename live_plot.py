@@ -17,15 +17,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from time import time
+import numpy as np
 from matplotlib import pyplot as plt
 
-import numpy as np
-import tensorflow as tf
 
-
-class LiveLossPlot(tf.keras.callbacks.Callback):
-    def __init__(self, batch_range=5000, range_min=-0.05, range_max=1.0):
+class LivePlot():
+    def __init__(self, batch_range=10000, range_min=-0.05, range_max=1.0, title='Live plot', legend='Loss'):
         super().__init__()
         plt.style.use(['dark_background'])
         self.fig, self.ax = plt.subplots()
@@ -36,9 +33,9 @@ class LiveLossPlot(tf.keras.callbacks.Callback):
         self.values, = self.ax.plot(np.random.rand(batch_range))
         self.recent_values = []
         self.skip_count = 0
-        plt.gcf().canvas.set_window_title('Live loss plot')
+        plt.gcf().canvas.set_window_title(title)
         plt.xlabel('Batch range')
-        plt.legend(['Loss'])
+        plt.legend([legend])
         plt.tight_layout(pad=0.5)
 
     def update(self, loss, skip_count=20):
