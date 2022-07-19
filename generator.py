@@ -24,41 +24,42 @@ import tensorflow as tf
 from cv2 import cv2
 
 
-class SigmoidClassifierDataGenerator:
-    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names):
-        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size)
+class DataGenerator:
+    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names, use_random_blur=True):
+        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size, use_random_blur)
 
     def flow(self):
         return self.generator_flow
 
 
 class GeneratorFlow(tf.keras.utils.Sequence):
-    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size):
+    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size, use_random_blur):
         self.root_path = root_path
         self.image_paths = image_paths
         self.class_names = class_names
         self.num_classes = len(self.class_names)
         self.input_shape = input_shape
         self.batch_size = batch_size
-        self.random_indexes = np.arange(len(self.image_paths))
+        self.use_random_blur = use_random_blur
         self.pool = ThreadPoolExecutor(8)
-        np.random.shuffle(self.random_indexes)
+        self.img_index = 0
+        np.random.shuffle(self.image_paths)
 
     def __getitem__(self, index):
+        fs = []
+        for i in range(self.batch_size):
+            fs.append(self.pool.submit(self.load_img, self.get_next_image_path()))
         batch_x = []
         batch_y = []
-        start_index = index * self.batch_size
-
-        fs = []
-        for i in range(start_index, start_index + self.batch_size):
-            fs.append(self.pool.submit(self._load_img, self.image_paths[self.random_indexes[i]]))
         for f in fs:
-            cur_img_path, x = f.result()
-            x = cv2.resize(x, (self.input_shape[1], self.input_shape[0]))
-            x = np.asarray(x).reshape(self.input_shape).astype('float32') / 255.0
+            img, path = f.result()
+            if self.use_random_blur:
+                img = self.random_blur(img)
+            img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
+            x = np.asarray(img).reshape(self.input_shape).astype('float32') / 255.0
             batch_x.append(x)
 
-            dir_name = cur_img_path.replace(self.root_path, '').split('/')[1]
+            dir_name = path.replace(self.root_path, '').split('/')[1]
             y = np.zeros((self.num_classes,), dtype=np.float32)
             if dir_name != 'unknown':
                 y[self.class_names.index(dir_name)] = 1.0
@@ -70,20 +71,22 @@ class GeneratorFlow(tf.keras.utils.Sequence):
     def __len__(self):
         return int(np.floor(len(self.image_paths) / self.batch_size))
 
-    def on_epoch_end(self):
-        np.random.shuffle(self.random_indexes)
+    def get_next_image_path(self):
+        path = self.image_paths[self.img_index]
+        self.img_index += 1
+        if self.img_index == len(self.image_paths):
+            self.img_index = 0
+            np.random.shuffle(self.image_paths)
+        return path
 
     def random_blur(self, img):
         if np.random.rand() > 0.5:
-            if np.random.rand() > 0.5:
-                img = cv2.GaussianBlur(img, (3, 3), 0)
-            else:
-                img = cv2.blur(img, (2, 2))
+            kernel_size = np.random.choice([3, 5])
+            img = cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
         return img
 
-    def _load_img(self, path):
+    def load_img(self, path):
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE if self.input_shape[2] == 1 else cv2.IMREAD_COLOR)
         if self.input_shape[-1] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # swap rb
-        img = self.random_blur(img)
-        return path, img
+        return img, path

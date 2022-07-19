@@ -25,9 +25,10 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 
-from generator import SigmoidClassifierDataGenerator
-from live_plot import LivePlot
 from model import Model
+from generator import DataGenerator
+from lr_scheduler import LRScheduler
+from live_plot import LivePlot
 
 
 class SigmoidClassifier:
@@ -57,31 +58,33 @@ class SigmoidClassifier:
         else:
             self.train_image_paths, self.validation_image_paths, self.class_names = self.init_image_paths(train_image_path, validation_split)
 
-        self.train_data_generator = SigmoidClassifierDataGenerator(
+        self.train_data_generator = DataGenerator(
             root_path=train_image_path,
             image_paths=self.balance_class(train_image_path, self.train_image_paths),
             input_shape=self.input_shape,
             batch_size=self.batch_size,
             class_names=self.class_names)
-        self.validation_data_generator = SigmoidClassifierDataGenerator(
+        self.validation_data_generator = DataGenerator(
             root_path=validation_image_path,
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=self.batch_size,
             class_names=self.class_names)
-        self.validation_data_generator_one_batch = SigmoidClassifierDataGenerator(
+        self.validation_data_generator_one_batch = DataGenerator(
             root_path=train_image_path if validation_image_path == '' else validation_image_path,
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
             class_names=self.class_names)
+        self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
 
         if pretrained_model_path != '':
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
         else:
             self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
             self.model.save('model.h5', include_optimizer=False)
-        self.live_plot = LivePlot()
+        self.live_loss_plot = LivePlot(legend='loss')
+        self.live_lr_plot = LivePlot(legend='learning rate', y_min=0.0, y_max=self.lr)
 
     def unify_path(self, path):
         if path == '':
@@ -146,19 +149,19 @@ class SigmoidClassifier:
         return train_image_paths, validation_image_paths, class_names
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, y_true, lr):
+    def compute_gradient(self, model, optimizer, batch_x, y_true):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
             loss = K.binary_crossentropy(y_true, y_pred)
             loss = tf.reduce_mean(loss, axis=0)
             mean_loss = tf.reduce_mean(loss)
-            gradients = tape.gradient(loss * lr, model.trainable_variables)
+        gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return mean_loss
 
     def fit(self):
         self.model.summary()
-        optimizer = tf.keras.optimizers.SGD(lr=1.0, momentum=self.momentum, nesterov=True)
+        optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
@@ -167,16 +170,14 @@ class SigmoidClassifier:
         iteration_count = 0
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
-                lr = self.lr * pow(iteration_count / 1000.0, 4) if iteration_count < 1000 else self.lr
-                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, tf.constant(lr))
-                self.live_plot.update(loss)
+                lr = self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
+                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
+                # self.live_loss_plot.update(loss)
+                # self.live_lr_plot.update(lr)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
-                if iteration_count > int(self.iterations * 0.8) and iteration_count % 2000 == 0:
-                    self.save_model(iteration_count)
-                if iteration_count in [int(self.iterations * 0.8), int(self.iterations * 0.9)]:
-                    self.lr *= 0.25
                 if iteration_count == self.iterations:
+                    self.save_model(iteration_count)
                     print('train end successfully')
                     exit(0)
 
