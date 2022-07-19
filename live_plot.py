@@ -22,13 +22,14 @@ from matplotlib import pyplot as plt
 
 
 class LivePlot():
-    def __init__(self, batch_range=10000, range_min=-0.05, range_max=1.0, title='Live plot', legend='Loss'):
+    def __init__(self, batch_range=10000, y_min=0.0, y_max=1.0, title='Live plot', legend='val'):
         super().__init__()
         plt.style.use(['dark_background'])
         self.fig, self.ax = plt.subplots()
-        self.range_min = range_min
-        self.range_max = range_max
-        self.ax.set_ylim(self.range_min, self.range_max)
+        pad = ((y_max - y_min) * 0.05)
+        self.y_min = y_min - pad
+        self.y_max = y_max + pad
+        self.ax.set_ylim(self.y_min, self.y_max)
         self.data = [np.NaN for _ in range(batch_range)]
         self.values, = self.ax.plot(np.random.rand(batch_range))
         self.recent_values = []
@@ -38,21 +39,21 @@ class LivePlot():
         plt.legend([legend])
         plt.tight_layout(pad=0.5)
 
-    def update(self, loss, skip_count=20):
-        if loss < self.range_min:
-            loss = self.range_min * 0.99
-        elif loss > self.range_max:
-            loss = self.range_max * 0.99
+    def update(self, val, skip_count=20):
+        if val < self.y_min:
+            val = self.y_min * 0.99
+        elif val > self.y_max:
+            val = self.y_max * 0.99
         self.data.pop(0)
-        self.data.append(self.get_recent_avg_value(loss))
+        self.data.append(self.get_recent_avg_value(val))
         self.skip_count += 1
         if self.skip_count == skip_count:
             self.skip_count = 0
             self.values.set_ydata(self.data)
             plt.pause(1e-9)
 
-    def get_recent_avg_value(self, loss):
+    def get_recent_avg_value(self, val):
         if len(self.recent_values) > 10:
             self.recent_values.pop(0)
-        self.recent_values.append(loss)
+        self.recent_values.append(val)
         return np.mean(self.recent_values)
