@@ -75,7 +75,8 @@ class SigmoidClassifier:
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
-            class_names=self.class_names)
+            class_names=self.class_names,
+            use_random_blur=False)
         self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
 
         if pretrained_model_path != '':
@@ -170,7 +171,7 @@ class SigmoidClassifier:
         iteration_count = 0
         while True:
             for batch_x, batch_y in self.train_data_generator.flow():
-                lr = self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
+                lr = self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
                 loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
                 # self.live_loss_plot.update(loss)
                 # self.live_lr_plot.update(lr)
