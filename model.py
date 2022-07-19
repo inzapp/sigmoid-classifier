@@ -31,31 +31,31 @@ class Model:
 
     def build(self):
         input_layer = tf.keras.layers.Input(shape=self.input_shape)
-        x = self.__conv_block(16, 3, input_layer, bn=False)
+        x = self.__conv_block(input_layer, 16, 3)
         x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(32, 3, x, bn=False)
+        x = self.__conv_block(x, 32, 3)
         x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(64, 3, x, bn=False)
+        x = self.__conv_block(x, 64, 3)
         x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(128, 3, x, bn=False)
+        x = self.__conv_block(x, 128, 3)
         x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(256, 3, x, bn=False)
+        x = self.__conv_block(x, 256, 3)
         x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(256, 3, x, bn=False)
+        x = self.__conv_block(x, 256, 3)
         y = self.__classification_layer(x)
         return tf.keras.models.Model(input_layer, y)
 
-    def __conv_block(self, filters, kernel_size, x, bn=True):
+    def __conv_block(self, x, filters, kernel_size, bn=False):
         x = self.__conv(x, filters, kernel_size, use_bias=False if bn else True)
         if bn:
             x = tf.keras.layers.BatchNormalization()(x)
