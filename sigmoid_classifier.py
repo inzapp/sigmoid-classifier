@@ -43,8 +43,8 @@ class SigmoidClassifier:
                  validation_image_path='',
                  validation_split=0.2,
                  show_class_activation_map=False,
-                 cam_activation_layer_name='activation_4',
-                 last_conv_layer_name='conv2d_6'):
+                 cam_activation_layer_name='cam_activation',
+                 last_conv_layer_name='squeeze_conv'):
         self.input_shape = input_shape
         self.lr = lr
         self.momentum = momentum
@@ -88,7 +88,11 @@ class SigmoidClassifier:
         if pretrained_model_path != '':
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
         else:
-            self.model = Model(input_shape=self.input_shape, num_classes=len(self.class_names)).build()
+            self.model = Model(
+                input_shape=self.input_shape,
+                num_classes=len(self.class_names),
+                last_conv_layer_name=last_conv_layer_name,
+                cam_activation_layer_name=cam_activation_layer_name).build()
             self.model.save('model.h5', include_optimizer=False)
         self.live_loss_plot = LivePlot(legend='loss')
         self.live_lr_plot = LivePlot(legend='learning rate', y_min=0.0, y_max=self.lr)
@@ -166,14 +170,14 @@ class SigmoidClassifier:
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return mean_loss
 
-    def draw_cam(self, model, x, label, window_size_h=512, alpha=0.5):
-        target_fmap = model.get_layer(name=self.cam_activation_layer_name).output
-        activation_h, activation_w, activation_c = target_fmap.shape[1:]
-        new_model = tf.keras.Model(self.model.input, target_fmap)
-        weights = np.asarray(model.get_layer(name=self.last_conv_layer_name).get_weights()[0].squeeze())
+    def draw_cam(self, x, label, window_size_h=512, alpha=0.6):
+        cam_activation_layer = self.model.get_layer(name=self.cam_activation_layer_name).output
+        activation_h, activation_w, activation_c = cam_activation_layer.shape[1:]
+        cam_model = tf.keras.Model(self.model.input, cam_activation_layer)
+        weights = np.asarray(self.model.get_layer(name=self.last_conv_layer_name).get_weights()[0].squeeze())
         img_h, img_w, img_c = x.shape
 
-        fmap = np.asarray(new_model(x[tf.newaxis, ...], training=False)[0])
+        activation_map = np.asarray(cam_model(x[tf.newaxis, ...], training=False)[0])
         if img_c == 1:
             x = np.concatenate([x, x, x], axis=-1)
         image_grid = None
@@ -185,7 +189,7 @@ class SigmoidClassifier:
             class_weights = weights[:, idx]
             cam = np.zeros((activation_h, activation_w), dtype=np.float32)
             for i in range(activation_c):
-                cam += class_weights[i] * fmap[:, :, i]
+                cam += class_weights[i] * activation_map[:, :, i]
             cam = np.array(cam)
 
             cam -= np.min(cam)
@@ -234,7 +238,7 @@ class SigmoidClassifier:
                             new_input_tensor = batch_x[rnum]
                             label_idx = np.argmax(batch_y[rnum]).item()
                             break
-                    self.draw_cam(self.model, new_input_tensor, label_idx)
+                    self.draw_cam(new_input_tensor, label_idx)
                 # self.live_loss_plot.update(loss)
                 # self.live_lr_plot.update(lr)
                 iteration_count += 1

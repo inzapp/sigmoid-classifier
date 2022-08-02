@@ -25,9 +25,11 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
 
 class Model:
-    def __init__(self, input_shape, num_classes):
+    def __init__(self, input_shape, num_classes, last_conv_layer_name, cam_activation_layer_name):
         self.input_shape = input_shape
         self.num_classes = num_classes
+        self.last_conv_layer_name = last_conv_layer_name
+        self.cam_activation_layer_name = cam_activation_layer_name
 
     def build(self):
         input_layer = tf.keras.layers.Input(shape=self.input_shape)
@@ -47,19 +49,19 @@ class Model:
         x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
-        x = self.__conv_block(x, 256, 3)
+        x = self.__conv_block(x, 256, 3, cam_activation=True)
         x = self.__max_pool(x)
 
         x = self.__drop_filter(x, 0.0625)
         x = self.__conv_block(x, 256, 3)
-        y = self.__classification_layer(x)
-        return tf.keras.models.Model(input_layer, y)
+        output_layer = self.__classification_layer(x)
+        return tf.keras.models.Model(input_layer, output_layer)
 
-    def __conv_block(self, x, filters, kernel_size, bn=False):
+    def __conv_block(self, x, filters, kernel_size, bn=False, cam_activation=False):
         x = self.__conv(x, filters, kernel_size, use_bias=False if bn else True)
         if bn:
             x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Activation('relu')(x)
+        x = tf.keras.layers.Activation('relu', name=self.cam_activation_layer_name if cam_activation else None)(x)
         return x
 
     def __conv(self, x, filters, kernel_size, use_bias=True):
@@ -75,7 +77,8 @@ class Model:
             filters=self.num_classes,
             kernel_size=1,
             kernel_initializer='glorot_normal',
-            activation='sigmoid')(x)
+            activation='sigmoid',
+            name=self.last_conv_layer_name)(x)
         return tf.keras.layers.GlobalAveragePooling2D(name=name)(x)
 
     def __max_pool(self, x):
