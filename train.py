@@ -28,6 +28,4 @@ if __name__ == '__main__':
         momentum=0.9,
         batch_size=32,
         iterations=1000000,
-        show_class_activation_map=True,
-        activation_layer_name='activation_4',
-        backprop_last_layer_name='conv2d_6').fit()
+        show_class_activation_map=True).fit()
