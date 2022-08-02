@@ -43,9 +43,8 @@ class SigmoidClassifier:
                  validation_image_path='',
                  validation_split=0.2,
                  show_class_activation_map=False,
-                 activation_layer_name=None,
-                 backprop_last_layer_name=None
-                 ):
+                 cam_activation_layer_name='activation_4',
+                 last_conv_layer_name='conv2d_6'):
         self.input_shape = input_shape
         self.lr = lr
         self.momentum = momentum
@@ -53,8 +52,8 @@ class SigmoidClassifier:
         self.iterations = iterations
         self.max_val_acc = 0.0
         self.show_class_activation_map = show_class_activation_map
-        self.activation_layer_name = activation_layer_name
-        self.backprop_last_layer_name = backprop_last_layer_name
+        self.cam_activation_layer_name = cam_activation_layer_name
+        self.last_conv_layer_name = last_conv_layer_name
 
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
@@ -167,67 +166,48 @@ class SigmoidClassifier:
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return mean_loss
 
-    def draw_cam(self, model, input_image, label, window_size_h=512):
-        target_fmap = model.get_layer(name=self.activation_layer_name).output
+    def draw_cam(self, model, x, label, window_size_h=512, alpha=0.5):
+        target_fmap = model.get_layer(name=self.cam_activation_layer_name).output
         activation_h, activation_w, activation_c = target_fmap.shape[1:]
         new_model = tf.keras.Model(self.model.input, target_fmap)
-        weights = model.get_layer(name=self.backprop_last_layer_name).get_weights()[0]
+        weights = model.get_layer(name=self.last_conv_layer_name).get_weights()[0]
         weights = weights.squeeze()
-        img_h, img_w, img_c = input_image.shape
+        img_h, img_w, img_c = x.shape
 
-        input_image = input_image[tf.newaxis, ...]
-        fmap = new_model(input_image)
-        display_append = None
+        fmap = new_model(x[tf.newaxis, ...], training=False)[0]
+        if img_c == 1:
+            x = np.concatenate([x, x, x], axis=-1)
+        image_grid = None
         for idx, cls in enumerate(self.class_names):
-            weights_cam = weights[:, idx]
-            camsum = np.zeros((activation_h, activation_w), dtype=np.float32)
-            org_image = input_image.copy()
-            if img_c != 1:
-                org_image = cv2.cvtColor(org_image.squeeze(0), cv2.COLOR_RGB2BGR)[tf.newaxis, ...]
+            org_image = x.copy()
+            if img_c == 3:
+                org_image = cv2.cvtColor(org_image, cv2.COLOR_RGB2BGR)
 
+            class_weights = weights[:, idx]
+            cam = np.zeros((activation_h, activation_w), dtype=np.float32)
             for i in range(activation_c):
-                camsum += weights_cam[i] * fmap[0, :, :, i]
-            camsum = camsum.numpy()
-            camsum = cv2.resize(camsum, (img_w, img_h))
-            camsum = ((camsum - camsum.min()) / (camsum.max() - camsum.min())) * 255
-            camsum = camsum.astype(np.uint8)
-            camsum = 255 - camsum
-            camsum = camsum / 255.
-            if img_c == 1:
-                camsum = camsum[..., tf.newaxis]
-            else:
-                camsum = np.stack((camsum,)*3, axis=-1)
+                cam += class_weights[i] * fmap[:, :, i]
+            cam = np.array(cam)
 
-            if label == idx:
-                if img_c == 1:
-                    labelbox = np.ones((img_h, 20, 1), dtype=np.float32)
-                else:
-                    b = np.zeros((img_h, 20, 1), dtype=np.float32)
-                    g = np.ones((img_h, 20, 1), dtype=np.float32)
-                    r = np.zeros((img_h, 20, 1), dtype=np.float32)
-                    labelbox = cv2.merge((b, g, r))
-            else:
-                if img_c == 1:
-                    labelbox = np.zeros((img_h, 20, 1), dtype=np.float32)
-                else:
-                    labelbox = np.zeros((img_h, 20, 3), dtype=np.float32)
-            cls_display_append = np.hstack([labelbox, org_image.squeeze(0)])
-            cls_display_append = np.hstack([cls_display_append, camsum])
-            alpha = 0.5
-            temp_org_image = (org_image.squeeze(0) * 255).astype(np.uint8)
-            if self.input_shape[-1] == 1:
-                temp_org_image = cv2.cvtColor(temp_org_image, cv2.COLOR_GRAY2BGR)
-            temp_camsum = (camsum * 255).astype(np.uint8)
-            temp_camsum = cv2.applyColorMap(temp_camsum, cv2.COLORMAP_JET)
-            display_blending = cv2.addWeighted(temp_org_image, alpha, temp_camsum, (1 - alpha), 0)
-            display_blending = (display_blending / 255.).astype(np.float32)
-            if img_c == 1:
-                cls_display_append = np.stack((cls_display_append.squeeze(-1),)*3, axis=-1)
-            cls_display_append = np.hstack([cls_display_append, display_blending])
-            display_append = np.vstack([display_append, cls_display_append]) if display_append is not None else cls_display_append.copy()
+            cam -= np.min(cam)
+            cam /= np.max(cam)
+            cam *= 255.0
+            cam = cam.astype('uint8')
+            cam = cv2.resize(cam, (img_w, img_h))
+            cam = cam[..., np.newaxis]
+            cam = np.concatenate([cam, cam, cam], axis=-1)
+
+            cam_jet = cv2.applyColorMap(cam, cv2.COLORMAP_JET)
+            cam_blended = cv2.addWeighted((org_image * 255).astype(np.uint8), alpha, cam_jet, (1 - alpha), 0)
+
+            label_box = np.zeros((img_h, 20, 3), dtype=np.float32) + float(label == idx)
+            label_box = (label_box * 255.0).astype('uint8')
+            org_image = (org_image * 255.0).astype('uint8')
+            grid_row = np.concatenate([label_box, org_image, cam, cam_jet, cam_blended], axis=1)
+            image_grid = np.append(image_grid, grid_row, axis=0) if image_grid is not None else grid_row.copy()
         if window_size_h is not None:
-            display_append = cv2.resize(display_append, ((window_size_h * display_append.shape[1]) // display_append.shape[0], window_size_h))
-        cv2.imshow('cam', display_append)
+            image_grid = cv2.resize(image_grid, ((window_size_h * image_grid.shape[1]) // image_grid.shape[0], window_size_h))
+        cv2.imshow('cam', image_grid)
         cv2.waitKey(1)
 
     def fit(self):
@@ -249,7 +229,7 @@ class SigmoidClassifier:
                         if try_count > len(batch_x):
                             break
                         rnum = random.randint(0, len(batch_x) - 1)
-                        if np.all(batch_y[rnum] < 0.3): # if unknown? > no display
+                        if np.all(batch_y[rnum] < 0.3):  # skip cam view if unknown data
                             continue
                         else:
                             new_input_tensor = batch_x[rnum]
