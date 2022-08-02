@@ -42,7 +42,7 @@ class SigmoidClassifier:
                  pretrained_model_path='',
                  validation_image_path='',
                  validation_split=0.2,
-                 showcam=False,
+                 show_class_activation_map=False,
                  activation_layer_name=None,
                  backprop_last_layer_name=None
                  ):
@@ -52,7 +52,7 @@ class SigmoidClassifier:
         self.batch_size = batch_size
         self.iterations = iterations
         self.max_val_acc = 0.0
-        self.showcam = showcam
+        self.show_class_activation_map = show_class_activation_map
         self.activation_layer_name = activation_layer_name
         self.backprop_last_layer_name = backprop_last_layer_name
 
@@ -167,8 +167,7 @@ class SigmoidClassifier:
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return mean_loss
 
-    def draw_cam(self, model, input_image, label):
-        window_size_h = 800
+    def draw_cam(self, model, input_image, label, window_size_h=512):
         target_fmap = model.get_layer(name=self.activation_layer_name).output
         activation_h, activation_w, activation_c = target_fmap.shape[1:]
         new_model = tf.keras.Model(self.model.input, target_fmap)
@@ -214,11 +213,13 @@ class SigmoidClassifier:
                     labelbox = np.zeros((img_h, 20, 3), dtype=np.float32)
             cls_display_append = np.hstack([labelbox, org_image.squeeze(0)])
             cls_display_append = np.hstack([cls_display_append, camsum])
-            alpha = 0.3
+            alpha = 0.5
             temp_org_image = (org_image.squeeze(0) * 255).astype(np.uint8)
+            if self.input_shape[-1] == 1:
+                temp_org_image = cv2.cvtColor(temp_org_image, cv2.COLOR_GRAY2BGR)
             temp_camsum = (camsum * 255).astype(np.uint8)
-            display_blending = cv2.addWeighted(temp_org_image, alpha, temp_camsum, (1-alpha), 0)
-            display_blending = cv2.applyColorMap(display_blending, cv2.COLORMAP_JET)
+            temp_camsum = cv2.applyColorMap(temp_camsum, cv2.COLORMAP_JET)
+            display_blending = cv2.addWeighted(temp_org_image, alpha, temp_camsum, (1 - alpha), 0)
             display_blending = (display_blending / 255.).astype(np.float32)
             if img_c == 1:
                 cls_display_append = np.stack((cls_display_append.squeeze(-1),)*3, axis=-1)
@@ -228,7 +229,6 @@ class SigmoidClassifier:
             display_append = cv2.resize(display_append, ((window_size_h * display_append.shape[1]) // display_append.shape[0], window_size_h))
         cv2.imshow('cam', display_append)
         cv2.waitKey(1)
-        
 
     def fit(self):
         self.model.summary()
@@ -243,7 +243,7 @@ class SigmoidClassifier:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 lr = self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
                 loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
-                if self.showcam and iteration_count % 100 == 0:
+                if self.show_class_activation_map and iteration_count % 100 == 0:
                     try_count = 0
                     while True:
                         if try_count > len(batch_x):
