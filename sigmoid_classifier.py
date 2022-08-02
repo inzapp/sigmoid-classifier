@@ -24,12 +24,12 @@ from tqdm import tqdm
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-
+import random
 from model import Model
 from generator import DataGenerator
 from lr_scheduler import LRScheduler
 from live_plot import LivePlot
-
+import cv2
 
 class SigmoidClassifier:
     def __init__(self,
@@ -41,13 +41,20 @@ class SigmoidClassifier:
                  iterations,
                  pretrained_model_path='',
                  validation_image_path='',
-                 validation_split=0.2):
+                 validation_split=0.2,
+                 showcam=False,
+                 activation_layer_name=None,
+                 backprop_last_layer_name=None
+                 ):
         self.input_shape = input_shape
         self.lr = lr
         self.momentum = momentum
         self.batch_size = batch_size
         self.iterations = iterations
         self.max_val_acc = 0.0
+        self.showcam = showcam
+        self.activation_layer_name = activation_layer_name
+        self.backprop_last_layer_name = backprop_last_layer_name
 
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
@@ -160,6 +167,69 @@ class SigmoidClassifier:
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return mean_loss
 
+    def draw_cam(self, model, input_image, label):
+        window_size_h = 800
+        target_fmap = model.get_layer(name=self.activation_layer_name).output
+        activation_h, activation_w, activation_c = target_fmap.shape[1:]
+        new_model = tf.keras.Model(self.model.input, target_fmap)
+        weights = model.get_layer(name=self.backprop_last_layer_name).get_weights()[0]
+        weights = weights.squeeze()
+        img_h, img_w, img_c = input_image.shape
+
+        input_image = input_image[tf.newaxis, ...]
+        fmap = new_model(input_image)
+        display_append = None
+        for idx, cls in enumerate(self.class_names):
+            weights_cam = weights[:, idx]
+            camsum = np.zeros((activation_h, activation_w), dtype=np.float32)
+            org_image = input_image.copy()
+            if img_c != 1:
+                org_image = cv2.cvtColor(org_image.squeeze(0), cv2.COLOR_RGB2BGR)[tf.newaxis, ...]
+
+            for i in range(activation_c):
+                camsum += weights_cam[i] * fmap[0, :, :, i]
+            camsum = camsum.numpy()
+            camsum = cv2.resize(camsum, (img_w, img_h))
+            camsum = ((camsum - camsum.min()) / (camsum.max() - camsum.min())) * 255
+            camsum = camsum.astype(np.uint8)
+            camsum = 255 - camsum
+            camsum = camsum / 255.
+            if img_c == 1:
+                camsum = camsum[..., tf.newaxis]
+            else:
+                camsum = np.stack((camsum,)*3, axis=-1)
+
+            if label == idx:
+                if img_c == 1:
+                    labelbox = np.ones((img_h, 20, 1), dtype=np.float32)
+                else:
+                    b = np.zeros((img_h, 20, 1), dtype=np.float32)
+                    g = np.ones((img_h, 20, 1), dtype=np.float32)
+                    r = np.zeros((img_h, 20, 1), dtype=np.float32)
+                    labelbox = cv2.merge((b, g, r))
+            else:
+                if img_c == 1:
+                    labelbox = np.zeros((img_h, 20, 1), dtype=np.float32)
+                else:
+                    labelbox = np.zeros((img_h, 20, 3), dtype=np.float32)
+            cls_display_append = np.hstack([labelbox, org_image.squeeze(0)])
+            cls_display_append = np.hstack([cls_display_append, camsum])
+            alpha = 0.3
+            temp_org_image = (org_image.squeeze(0) * 255).astype(np.uint8)
+            temp_camsum = (camsum * 255).astype(np.uint8)
+            display_blending = cv2.addWeighted(temp_org_image, alpha, temp_camsum, (1-alpha), 0)
+            display_blending = cv2.applyColorMap(display_blending, cv2.COLORMAP_JET)
+            display_blending = (display_blending / 255.).astype(np.float32)
+            if img_c == 1:
+                cls_display_append = np.stack((cls_display_append.squeeze(-1),)*3, axis=-1)
+            cls_display_append = np.hstack([cls_display_append, display_blending])
+            display_append = np.vstack([display_append, cls_display_append]) if display_append is not None else cls_display_append.copy()
+        if window_size_h is not None:
+            display_append = cv2.resize(display_append, ((window_size_h * display_append.shape[1]) // display_append.shape[0], window_size_h))
+        cv2.imshow('cam', display_append)
+        cv2.waitKey(1)
+        
+
     def fit(self):
         self.model.summary()
         optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
@@ -170,9 +240,22 @@ class SigmoidClassifier:
         print(f'validate on {len(self.validation_image_paths)} samples\n')
         iteration_count = 0
         while True:
-            for batch_x, batch_y in self.train_data_generator.flow():
+            for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 lr = self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
                 loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
+                if self.showcam and iteration_count % 100 == 0:
+                    try_count = 0
+                    while True:
+                        if try_count > len(batch_x):
+                            break
+                        rnum = random.randint(0, len(batch_x) - 1)
+                        if np.all(batch_y[rnum] < 0.3): # if unknown? > no display
+                            continue
+                        else:
+                            new_input_tensor = batch_x[rnum]
+                            label_idx = np.argmax(batch_y[rnum]).item()
+                            break
+                    self.draw_cam(self.model, new_input_tensor, label_idx)
                 # self.live_loss_plot.update(loss)
                 # self.live_lr_plot.update(lr)
                 iteration_count += 1

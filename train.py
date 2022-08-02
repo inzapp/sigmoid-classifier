@@ -21,10 +21,13 @@ from sigmoid_classifier import SigmoidClassifier
 
 if __name__ == '__main__':
     SigmoidClassifier(
-        train_image_path=r'/train_data/imagenet/train',
-        validation_image_path=r'/train_data/imagenet/validation',
-        input_shape=(224, 224, 1),
+        train_image_path=r'/home3/INCIDENT/cf/big/big_cf/train',
+        validation_image_path=r'/home3/INCIDENT/cf/big/big_cf/validation',
+        input_shape=(64, 64,3),
         lr=0.003,
         momentum=0.9,
         batch_size=32,
-        iterations=1000000).fit()
+        iterations=1000000,
+        showcam=True,
+        activation_layer_name='activation_4',
+        backprop_last_layer_name='conv2d_6').fit()
