@@ -170,11 +170,10 @@ class SigmoidClassifier:
         target_fmap = model.get_layer(name=self.cam_activation_layer_name).output
         activation_h, activation_w, activation_c = target_fmap.shape[1:]
         new_model = tf.keras.Model(self.model.input, target_fmap)
-        weights = model.get_layer(name=self.last_conv_layer_name).get_weights()[0]
-        weights = weights.squeeze()
+        weights = np.asarray(model.get_layer(name=self.last_conv_layer_name).get_weights()[0].squeeze())
         img_h, img_w, img_c = x.shape
 
-        fmap = new_model(x[tf.newaxis, ...], training=False)[0]
+        fmap = np.asarray(new_model(x[tf.newaxis, ...], training=False)[0])
         if img_c == 1:
             x = np.concatenate([x, x, x], axis=-1)
         image_grid = None
