@@ -21,32 +21,34 @@ import os
 from glob import glob
 from tqdm import tqdm
 
+import cv2
 import numpy as np
 import tensorflow as tf
-import tensorflow.keras.backend as K
 import random
 from model import Model
 from generator import DataGenerator
 from lr_scheduler import LRScheduler
 from live_plot import LivePlot
-import cv2
+from ale import AbsoluteLogarithmicError
+
 
 class SigmoidClassifier:
     def __init__(self,
                  train_image_path,
                  input_shape,
                  lr,
+                 gamma,
                  momentum,
                  batch_size,
                  iterations,
                  pretrained_model_path='',
                  validation_image_path='',
-                 validation_split=0.2,
                  show_class_activation_map=False,
                  cam_activation_layer_name='cam_activation',
                  last_conv_layer_name='squeeze_conv'):
         self.input_shape = input_shape
         self.lr = lr
+        self.gamma = gamma
         self.momentum = momentum
         self.batch_size = batch_size
         self.iterations = iterations
@@ -58,18 +60,22 @@ class SigmoidClassifier:
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
 
-        if validation_image_path != '':
-            self.train_image_paths, _, self.class_names = self.init_image_paths(train_image_path)
-            self.validation_image_paths, _, self.class_names = self.init_image_paths(validation_image_path)
-        else:
-            self.train_image_paths, self.validation_image_paths, self.class_names = self.init_image_paths(train_image_path, validation_split)
+        self.train_image_paths, train_class_names, _ = self.init_image_paths(train_image_path)
+        self.validation_image_paths, validation_class_names, self.include_unknown = self.init_image_paths(validation_image_path)
+        if len(self.train_image_paths) == 0:
+            print(f'no images in train_image_path : {train_image_path}')
+            exit(0)
+        if len(self.validation_image_paths) == 0:
+            print(f'no images in validation_image_path : {validation_image_path}')
+            exit(0)
 
+        self.class_names = validation_class_names
         self.train_data_generator = DataGenerator(
             root_path=train_image_path,
-            image_paths=self.balance_class(train_image_path, self.train_image_paths),
+            image_paths=self.train_image_paths,
             input_shape=self.input_shape,
             batch_size=self.batch_size,
-            class_names=self.class_names)
+            class_names=train_class_names)
         self.validation_data_generator = DataGenerator(
             root_path=validation_image_path,
             image_paths=self.validation_image_paths,
@@ -77,7 +83,7 @@ class SigmoidClassifier:
             batch_size=self.batch_size,
             class_names=self.class_names)
         self.validation_data_generator_one_batch = DataGenerator(
-            root_path=train_image_path if validation_image_path == '' else validation_image_path,
+            root_path=validation_image_path,
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
@@ -95,7 +101,6 @@ class SigmoidClassifier:
                 cam_activation_layer_name=cam_activation_layer_name).build()
             self.model.save('model.h5', include_optimizer=False)
         self.live_loss_plot = LivePlot(legend='loss')
-        self.live_lr_plot = LivePlot(legend='learning rate', y_min=0.0, y_max=self.lr)
 
     def unify_path(self, path):
         if path == '':
@@ -105,37 +110,13 @@ class SigmoidClassifier:
             path = path[len(self.root_path) - 1]
         return path
 
-    def balance_class(self, root_path, paths):
-        d = {}
-        for path in paths:
-            dir_name = path.replace(root_path, '').split('/')[1]
-            try:
-                d[dir_name].append(path)
-            except KeyError:
-                d[dir_name] = [path]
-        max_length = -1
-        for key in list(d.keys()):
-            if len(d[key]) > max_length:
-                max_length = len(d[key])
-        for key in list(d.keys()):
-            class_path_length = len(d[key])
-            if class_path_length < max_length:
-                for i in range(max_length - class_path_length):
-                    random_index = np.random.randint(class_path_length)
-                    d[key].append(d[key][random_index])
-        new_paths = []
-        for key in list(d.keys()):
-            for class_image_path in d[key]:
-                new_paths.append(class_image_path)
-        return new_paths
-
-    def init_image_paths(self, image_path, validation_split=0.0):
+    def init_image_paths(self, image_path):
+        include_unknown = False
         dir_paths = sorted(glob(f'{image_path}/*'))
         for i in range(len(dir_paths)):
             dir_paths[i] = dir_paths[i].replace('\\', '/')
+        image_paths = []
         class_name_set = set()
-        train_image_paths = []
-        validation_image_paths = []
         for dir_path in dir_paths:
             if not os.path.isdir(dir_path):
                 continue
@@ -143,32 +124,25 @@ class SigmoidClassifier:
             if dir_name[0] == '_':
                 print(f'class dir {dir_name} is ignored. dir_name[0] == "_"')
                 continue
-            if dir_name != 'unknown':
+            if dir_name == 'unknown':
+                include_unknown = True
+            else:
                 class_name_set.add(dir_name)
             cur_class_image_paths = glob(f'{dir_path}/**/*.jpg', recursive=True)
             for i in range(len(cur_class_image_paths)):
                 cur_class_image_paths[i] = cur_class_image_paths[i].replace('\\', '/')
-            if validation_split == 0.0:
-                train_image_paths += cur_class_image_paths
-                continue
-            np.random.shuffle(cur_class_image_paths)
-            num_cur_class_train_images = int(len(cur_class_image_paths) * (1.0 - validation_split))
-            train_image_paths += cur_class_image_paths[:num_cur_class_train_images]
-            validation_image_paths += cur_class_image_paths[num_cur_class_train_images:]
+            image_paths += cur_class_image_paths
         class_names = sorted(list(class_name_set))
-        np.random.shuffle(validation_image_paths)
-        return train_image_paths, validation_image_paths, class_names
+        return image_paths, class_names, include_unknown
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, y_true):
+    def compute_gradient(self, model, optimizer, loss_fn, batch_x, y_true):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
-            loss = K.binary_crossentropy(y_true, y_pred)
-            loss = tf.reduce_mean(loss, axis=0)
-            mean_loss = tf.reduce_mean(loss)
+            loss = loss_fn(y_true, y_pred)
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return mean_loss
+        return loss
 
     def draw_cam(self, x, label, window_size_h=512, alpha=0.6):
         cam_activation_layer = self.model.get_layer(name=self.cam_activation_layer_name).output
@@ -215,6 +189,7 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.summary()
+        loss_fn = AbsoluteLogarithmicError(gamma=self.gamma, reduce='mean')
         optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
@@ -224,8 +199,8 @@ class SigmoidClassifier:
         iteration_count = 0
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
-                lr = self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
-                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y)
+                self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
+                loss = self.compute_gradient(self.model, optimizer, loss_fn, batch_x, batch_y)
                 if self.show_class_activation_map and iteration_count % 100 == 0:
                     try_count = 0
                     while True:
@@ -239,27 +214,32 @@ class SigmoidClassifier:
                             label_idx = np.argmax(batch_y[rnum]).item()
                             break
                     self.draw_cam(new_input_tensor, label_idx)
-                # self.live_loss_plot.update(loss)
-                # self.live_lr_plot.update(lr)
+                self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count == self.iterations:
                     self.save_model(iteration_count)
                     print('train end successfully')
                     exit(0)
+                elif iteration_count % 1000 == 0:
+                    self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
         print(f'iteration count : {iteration_count}')
         if self.validation_data_generator.flow() is None:
             self.model.save(f'checkpoints/model_{iteration_count}_iter.h5', include_optimizer=False)
         else:
-            val_acc = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
+            val_acc, val_class_score, val_unknown_score = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
+            model_name = f'model_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
+            if self.include_unknown:
+                model_name += f'_unknown_score_{val_unknown_score:.4f}'
             if val_acc > self.max_val_acc:
                 self.max_val_acc = val_acc
-                self.model.save(f'checkpoints/best_model_{iteration_count}_iter_val_acc_{val_acc:.4f}.h5', include_optimizer=False)
-                print(f'[best model saved] {iteration_count} iteration => val_acc: {val_acc:.4f}\n')
+                model_name = f'checkpoints/best_{model_name}.h5'
+                print(f'[best model saved]\n')
             else:
-                self.model.save(f'checkpoints/model_{iteration_count}_iter_val_acc_{val_acc:.4f}.h5', include_optimizer=False)
+                model_name = f'checkpoints/{model_name}.h5'
+            self.model.save(model_name, include_optimizer=False)
 
     def evaluate(self, unknown_threshold=0.5):
         self.evaluate_core(unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator_one_batch)
@@ -269,39 +249,56 @@ class SigmoidClassifier:
         def predict(model, x):
             return model(x, training=False)
         num_classes = self.model.output_shape[1]
-        true_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
+        hit_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         total_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
-        true_unknown_count = total_unknown_count = 0
+        hit_unknown_count = total_unknown_count = 0
+        hit_scores = np.zeros(shape=(num_classes,), dtype=np.float32)
+        unknown_score_sum = 0.0
         for batch_x, batch_y in tqdm(validation_data_generator.flow()):
             y = predict(self.model, batch_x)[0]
-            # with np.printoptions(precision=2, suppress=True):
-            #     print(np.asarray(y))
             max_score_index = np.argmax(y)
             max_score = y[max_score_index]
             if np.sum(batch_y[0]) == 0.0:  # case unknown using zero label
                 total_unknown_count += 1
                 if max_score < unknown_threshold:
-                    true_unknown_count += 1
+                    hit_unknown_count += 1
+                    unknown_score_sum += max_score
             else:  # case classification
                 true_class_index = np.argmax(batch_y[0])
                 total_counts[true_class_index] += 1
-                if max_score_index == true_class_index and max_score >= unknown_threshold:
-                    true_counts[true_class_index] += 1
+                if max_score_index == true_class_index:
+                    if self.include_unknown:
+                        if max_score >= unknown_threshold:
+                            hit_counts[true_class_index] += 1
+                            hit_scores[true_class_index] += max_score
+                    else:
+                        hit_counts[true_class_index] += 1
+                        hit_scores[true_class_index] += max_score
 
         print('\n')
-        acc_sum = 0.0
+        total_acc_sum = 0.0
+        class_score_sum = 0.0
         for i in range(len(total_counts)):
-            cur_class_acc = true_counts[i] / (float(total_counts[i]) + 1e-5)
-            acc_sum += cur_class_acc
-            print(f'[class {i:2d}] acc => {cur_class_acc:.4f}')
+            cur_class_acc = hit_counts[i] / (float(total_counts[i]) + 1e-5)
+            cur_class_score = hit_scores[i] / (float(hit_counts[i]) + 1e-5)
+            total_acc_sum += cur_class_acc
+            class_score_sum += cur_class_score
+            print(f'[class {i:2d}] acc : {cur_class_acc:.4f}, score : {cur_class_score:.4f}')
 
         valid_class_count = num_classes
-        if total_unknown_count > 0:
-            unknown_acc = true_unknown_count / float(total_unknown_count + 1e-5)
-            acc_sum += unknown_acc
+        unknown_score = 0.0
+        if self.include_unknown and total_unknown_count > 0:
+            unknown_acc = hit_unknown_count / float(total_unknown_count + 1e-5)
+            unknown_score = unknown_score_sum / float(hit_unknown_count + 1e-5)
+            total_acc_sum += unknown_acc
             valid_class_count += 1
-            print(f'[class unknown] acc => {unknown_acc:.4f}')
+            print(f'[class unknown] acc : {unknown_acc:.4f}, score : {unknown_score:.4f}')
 
-        acc = acc_sum / valid_class_count
-        print(f'sigmoid classifier accuracy with unknown threshold({unknown_threshold:.2f}) : {acc:.4f}')
-        return acc
+        class_acc = total_acc_sum / valid_class_count
+        class_score = class_score_sum / num_classes
+        if self.include_unknown:
+            print(f'sigmoid classifier accuracy with unknown threshold({unknown_threshold:.2f}) : {class_acc:.4f}, class_score : {class_score:.4f}, unknown_score : {unknown_score:.4f}')
+        else:
+            print(f'sigmoid classifier accuracy : {class_acc:.4f}, class_score : {class_score:.4f}')
+        return class_acc, class_score, unknown_score
+
