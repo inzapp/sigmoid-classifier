@@ -221,7 +221,7 @@ class SigmoidClassifier:
                     self.save_model(iteration_count)
                     print('train end successfully')
                     exit(0)
-                elif iteration_count % 1000 == 0:
+                elif iteration_count % 5000 == 0:
                     self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
