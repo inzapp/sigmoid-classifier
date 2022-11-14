@@ -41,6 +41,7 @@ class SigmoidClassifier:
                  label_smoothing,
                  batch_size,
                  iterations,
+                 auto_balance=False,
                  pretrained_model_path='',
                  validation_image_path='',
                  show_class_activation_map=False,
@@ -52,6 +53,7 @@ class SigmoidClassifier:
         self.label_smoothing = label_smoothing
         self.batch_size = batch_size
         self.iterations = iterations
+        self.auto_balance = auto_balance
         self.max_val_acc = 0.0
         self.show_class_activation_map = show_class_activation_map
         self.cam_activation_layer_name = cam_activation_layer_name
@@ -125,6 +127,7 @@ class SigmoidClassifier:
         image_paths = []
         class_counts = []
         class_name_set = set()
+        unknown_class_count = 0
         print('class image count')
         for dir_path in dir_paths:
             if not os.path.isdir(dir_path):
@@ -142,12 +145,15 @@ class SigmoidClassifier:
                 cur_class_image_paths[i] = cur_class_image_paths[i].replace('\\', '/')
             image_paths += cur_class_image_paths
             cur_class_image_count = len(cur_class_image_paths)
-            class_counts.append(cur_class_image_count)
+            if dir_name == 'unknown':
+                unknown_class_count = cur_class_image_count
+            else:
+                class_counts.append(cur_class_image_count)
             print(f'class {dir_name} : {cur_class_image_count}')
         print()
         class_names = sorted(list(class_name_set))
-        min_class_count = min(class_counts)
-        class_weights = [min_class_count / float(count) for count in class_counts]
+        total_data_count = float(sum(class_counts)) + unknown_class_count
+        class_weights = [1.0 - (count / total_data_count) if self.auto_balance else 0.0 for count in class_counts]
         return image_paths, class_names, class_weights, include_unknown
 
     @tf.function
@@ -156,11 +162,16 @@ class SigmoidClassifier:
             y_pred = self.model(batch_x, training=True)
             bce = tf.keras.losses.BinaryCrossentropy(reduction='none')
             loss = bce(tf.expand_dims(y_true, axis=-1), tf.expand_dims(y_pred, axis=-1))
-            loss = tf.reduce_mean(loss, axis=0) * class_weights
-            loss_mean = tf.reduce_mean(loss)
+            batch_size = tf.cast(tf.shape(y_true)[0], dtype=y_pred.dtype)
+            class_weights_t = tf.convert_to_tensor(class_weights, dtype=y_pred.dtype)
+            if tf.reduce_sum(class_weights_t) > 0.0:
+                class_weights_t = tf.repeat(tf.expand_dims(class_weights_t, axis=0), tf.cast(batch_size, dtype=tf.int32), axis=0)
+                class_weights_t = tf.where(y_true == 1.0, class_weights_t, 1.0 - class_weights_t)
+                loss *= class_weights_t
+            loss = tf.reduce_sum(loss) / batch_size
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return loss_mean
+        return loss
 
     def draw_cam(self, x, label, window_size_h=512, alpha=0.6):
         cam_activation_layer = self.model.get_layer(name=self.cam_activation_layer_name).output
@@ -207,7 +218,6 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.summary()
-        loss_fn = tf.keras.losses.BinaryCrossentropy()
         optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
         # optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
@@ -240,7 +250,7 @@ class SigmoidClassifier:
                     self.save_model(iteration_count)
                     print('train end successfully')
                     exit(0)
-                elif iteration_count % 2000 == 0:
+                elif iteration_count % 1000 == 0:
                     self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
