@@ -125,6 +125,7 @@ class SigmoidClassifier:
         image_paths = []
         class_counts = []
         class_name_set = set()
+        print('class image count')
         for dir_path in dir_paths:
             if not os.path.isdir(dir_path):
                 continue
@@ -140,10 +141,13 @@ class SigmoidClassifier:
             for i in range(len(cur_class_image_paths)):
                 cur_class_image_paths[i] = cur_class_image_paths[i].replace('\\', '/')
             image_paths += cur_class_image_paths
-            class_counts.append(len(cur_class_image_paths))
+            cur_class_image_count = len(cur_class_image_paths)
+            class_counts.append(cur_class_image_count)
+            print(f'class {dir_name} : {cur_class_image_count}')
+        print()
         class_names = sorted(list(class_name_set))
         min_class_count = min(class_counts)
-        class_weights = [1.0 / (count / float(min_class_count)) for count in class_counts]
+        class_weights = [min_class_count / float(count) for count in class_counts]
         return image_paths, class_names, class_weights, include_unknown
 
     @tf.function
