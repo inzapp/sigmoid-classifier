@@ -21,7 +21,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 
 import numpy as np
 import tensorflow as tf
-from cv2 import cv2
+import cv2
 
 
 class DataGenerator:

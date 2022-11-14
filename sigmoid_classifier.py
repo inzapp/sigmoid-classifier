@@ -37,8 +37,8 @@ class SigmoidClassifier:
                  train_image_path,
                  input_shape,
                  lr,
-                 gamma,
                  momentum,
+                 label_smoothing,
                  batch_size,
                  iterations,
                  pretrained_model_path='',
@@ -48,8 +48,8 @@ class SigmoidClassifier:
                  last_conv_layer_name='squeeze_conv'):
         self.input_shape = input_shape
         self.lr = lr
-        self.gamma = gamma
         self.momentum = momentum
+        self.label_smoothing = label_smoothing
         self.batch_size = batch_size
         self.iterations = iterations
         self.max_val_acc = 0.0
@@ -60,8 +60,8 @@ class SigmoidClassifier:
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
 
-        self.train_image_paths, train_class_names, _ = self.init_image_paths(train_image_path)
-        self.validation_image_paths, validation_class_names, self.include_unknown = self.init_image_paths(validation_image_path)
+        self.train_image_paths, train_class_names, self.class_weights, _ = self.init_image_paths(train_image_path)
+        self.validation_image_paths, validation_class_names, _, self.include_unknown = self.init_image_paths(validation_image_path)
         if len(self.train_image_paths) == 0:
             print(f'no images in train_image_path : {train_image_path}')
             exit(0)
@@ -82,6 +82,13 @@ class SigmoidClassifier:
             input_shape=self.input_shape,
             batch_size=self.batch_size,
             class_names=self.class_names)
+        self.train_data_generator_one_batch = DataGenerator(
+            root_path=train_image_path,
+            image_paths=self.train_image_paths,
+            input_shape=self.input_shape,
+            batch_size=1,
+            class_names=train_class_names,
+            use_random_blur=False)
         self.validation_data_generator_one_batch = DataGenerator(
             root_path=validation_image_path,
             image_paths=self.validation_image_paths,
@@ -100,7 +107,7 @@ class SigmoidClassifier:
                 last_conv_layer_name=last_conv_layer_name,
                 cam_activation_layer_name=cam_activation_layer_name).build()
             self.model.save('model.h5', include_optimizer=False)
-        self.live_loss_plot = LivePlot(legend='loss')
+        # self.live_loss_plot = LivePlot(legend='loss')
 
     def unify_path(self, path):
         if path == '':
@@ -116,6 +123,7 @@ class SigmoidClassifier:
         for i in range(len(dir_paths)):
             dir_paths[i] = dir_paths[i].replace('\\', '/')
         image_paths = []
+        class_counts = []
         class_name_set = set()
         for dir_path in dir_paths:
             if not os.path.isdir(dir_path):
@@ -132,17 +140,23 @@ class SigmoidClassifier:
             for i in range(len(cur_class_image_paths)):
                 cur_class_image_paths[i] = cur_class_image_paths[i].replace('\\', '/')
             image_paths += cur_class_image_paths
+            class_counts.append(len(cur_class_image_paths))
         class_names = sorted(list(class_name_set))
-        return image_paths, class_names, include_unknown
+        min_class_count = min(class_counts)
+        class_weights = [1.0 / (count / float(min_class_count)) for count in class_counts]
+        return image_paths, class_names, class_weights, include_unknown
 
     @tf.function
-    def compute_gradient(self, model, optimizer, loss_fn, batch_x, y_true):
+    def compute_gradient(self, model, optimizer, batch_x, y_true, class_weights):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
-            loss = loss_fn(y_true, y_pred)
+            bce = tf.keras.losses.BinaryCrossentropy(reduction='none')
+            loss = bce(tf.expand_dims(y_true, axis=-1), tf.expand_dims(y_pred, axis=-1))
+            loss = tf.reduce_mean(loss, axis=0) * class_weights
+            loss_mean = tf.reduce_mean(loss)
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return loss
+        return loss_mean
 
     def draw_cam(self, x, label, window_size_h=512, alpha=0.6):
         cam_activation_layer = self.model.get_layer(name=self.cam_activation_layer_name).output
@@ -189,8 +203,9 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.summary()
-        loss_fn = AbsoluteLogarithmicError(gamma=self.gamma, reduce='mean')
+        loss_fn = tf.keras.losses.BinaryCrossentropy()
         optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
+        # optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
@@ -200,7 +215,7 @@ class SigmoidClassifier:
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
-                loss = self.compute_gradient(self.model, optimizer, loss_fn, batch_x, batch_y)
+                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, self.class_weights)
                 if self.show_class_activation_map and iteration_count % 100 == 0:
                     try_count = 0
                     while True:
@@ -214,14 +229,14 @@ class SigmoidClassifier:
                             label_idx = np.argmax(batch_y[rnum]).item()
                             break
                     self.draw_cam(new_input_tensor, label_idx)
-                self.live_loss_plot.update(loss)
+                # self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count == self.iterations:
                     self.save_model(iteration_count)
                     print('train end successfully')
                     exit(0)
-                elif iteration_count % 5000 == 0:
+                elif iteration_count % 2000 == 0:
                     self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
@@ -229,6 +244,7 @@ class SigmoidClassifier:
         if self.validation_data_generator.flow() is None:
             self.model.save(f'checkpoints/model_{iteration_count}_iter.h5', include_optimizer=False)
         else:
+            # self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.train_data_generator_one_batch)
             val_acc, val_class_score, val_unknown_score = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
             model_name = f'model_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
             if self.include_unknown:

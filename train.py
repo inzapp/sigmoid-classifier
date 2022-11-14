@@ -25,7 +25,6 @@ if __name__ == '__main__':
         validation_image_path=r'/train_data/imagenet/validation',
         input_shape=(64, 64, 1),
         lr=0.001,
-        gamma=2.0,
         momentum=0.9,
         batch_size=32,
         iterations=1000000,
