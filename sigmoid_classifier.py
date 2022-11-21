@@ -90,14 +90,14 @@ class SigmoidClassifier:
             input_shape=self.input_shape,
             batch_size=1,
             class_names=train_class_names,
-            use_random_blur=False)
+            augmentation=False)
         self.validation_data_generator_one_batch = DataGenerator(
             root_path=validation_image_path,
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
             class_names=self.class_names,
-            use_random_blur=False)
+            augmentation=False)
         self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
 
         if pretrained_model_path != '':
@@ -109,7 +109,7 @@ class SigmoidClassifier:
                 last_conv_layer_name=last_conv_layer_name,
                 cam_activation_layer_name=cam_activation_layer_name).build()
             self.model.save('model.h5', include_optimizer=False)
-        # self.live_loss_plot = LivePlot(legend='loss')
+        self.live_loss_plot = LivePlot(legend='loss')
 
     def unify_path(self, path):
         if path == '':
@@ -157,18 +157,17 @@ class SigmoidClassifier:
         return image_paths, class_names, class_weights, include_unknown
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, y_true, class_weights):
+    def compute_gradient(self, model, optimizer, batch_x, y_true, label_smoothing, class_weights):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
-            bce = tf.keras.losses.BinaryCrossentropy(reduction='none')
-            loss = bce(tf.expand_dims(y_true, axis=-1), tf.expand_dims(y_pred, axis=-1))
-            batch_size = tf.cast(tf.shape(y_true)[0], dtype=y_pred.dtype)
+            loss = AbsoluteLogarithmicError(label_smoothing=label_smoothing)(y_true, y_pred)
+            batch_size = tf.cast(tf.shape(y_true)[0], dtype=tf.int32)
             class_weights_t = tf.convert_to_tensor(class_weights, dtype=y_pred.dtype)
             if tf.reduce_sum(class_weights_t) > 0.0:
-                class_weights_t = tf.repeat(tf.expand_dims(class_weights_t, axis=0), tf.cast(batch_size, dtype=tf.int32), axis=0)
+                class_weights_t = tf.repeat(tf.expand_dims(class_weights_t, axis=0), repeats=batch_size, axis=0)
                 class_weights_t = tf.where(y_true == 1.0, class_weights_t, 1.0 - class_weights_t)
                 loss *= class_weights_t
-            loss = tf.reduce_sum(loss) / batch_size
+            loss = tf.reduce_sum(loss) / tf.cast(batch_size, dtype=loss.dtype)
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return loss
@@ -218,8 +217,8 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.summary()
-        optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
-        # optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
+        # optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
+        optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
@@ -229,7 +228,7 @@ class SigmoidClassifier:
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
-                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, self.class_weights)
+                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, self.label_smoothing, self.class_weights)
                 if self.show_class_activation_map and iteration_count % 100 == 0:
                     try_count = 0
                     while True:
@@ -243,7 +242,7 @@ class SigmoidClassifier:
                             label_idx = np.argmax(batch_y[rnum]).item()
                             break
                     self.draw_cam(new_input_tensor, label_idx)
-                # self.live_loss_plot.update(loss)
+                self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count == self.iterations:

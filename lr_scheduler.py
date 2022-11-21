@@ -59,8 +59,6 @@ class LRScheduler:
             lr = self.lr * pow(iteration_count / float(burn_in), 4)
         elif iteration_count == int(self.iterations * 0.8):
             lr = self.lr * 0.1
-        elif iteration_count == int(self.iterations * 0.9):
-            lr = self.lr * 0.01
         else:
             lr = self.lr
         self.__set_lr(optimizer, lr)

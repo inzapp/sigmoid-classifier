@@ -17,33 +17,38 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-from concurrent.futures.thread import ThreadPoolExecutor
-
+import cv2
 import numpy as np
 import tensorflow as tf
-import cv2
+import albumentations as A
+
+from concurrent.futures.thread import ThreadPoolExecutor
 
 
 class DataGenerator:
-    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names, use_random_blur=True):
-        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size, use_random_blur)
+    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names, augmentation=True):
+        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size, augmentation)
 
     def flow(self):
         return self.generator_flow
 
 
 class GeneratorFlow(tf.keras.utils.Sequence):
-    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size, use_random_blur):
+    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size, augmentation):
         self.root_path = root_path
         self.image_paths = image_paths
         self.class_names = class_names
         self.num_classes = len(self.class_names)
         self.input_shape = input_shape
         self.batch_size = batch_size
-        self.use_random_blur = use_random_blur
+        self.augmentation = augmentation
         self.pool = ThreadPoolExecutor(8)
         self.img_index = 0
         np.random.shuffle(self.image_paths)
+        self.transform = A.Compose([
+            A.RandomBrightnessContrast(p=0.5, brightness_limit=0.2, contrast_limit=0.5),
+            A.GaussianBlur(p=0.5, blur_limit=(7, 7))
+        ])
 
     def __getitem__(self, index):
         fs = []
@@ -53,8 +58,8 @@ class GeneratorFlow(tf.keras.utils.Sequence):
         batch_y = []
         for f in fs:
             img, path = f.result()
-            if self.use_random_blur:
-                img = self.random_blur(img)
+            if self.augmentation:
+                img = self.transform(image=img)['image']
             img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
             x = np.asarray(img).reshape(self.input_shape).astype('float32') / 255.0
             batch_x.append(x)

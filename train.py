@@ -26,6 +26,7 @@ if __name__ == '__main__':
         input_shape=(64, 64, 1),
         lr=0.001,
         momentum=0.9,
+        label_smoothing=0.01,
         batch_size=32,
         iterations=1000000,
         show_class_activation_map=False).fit()
