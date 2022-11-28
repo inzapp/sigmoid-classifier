@@ -41,6 +41,9 @@ class SigmoidClassifier:
                  label_smoothing,
                  batch_size,
                  iterations,
+                 gamma=2.0,
+                 warm_up=0.5,
+                 lr_policy='step',
                  auto_balance=False,
                  pretrained_model_path='',
                  validation_image_path='',
@@ -49,10 +52,13 @@ class SigmoidClassifier:
                  last_conv_layer_name='squeeze_conv'):
         self.input_shape = input_shape
         self.lr = lr
+        self.warm_up = warm_up
+        self.gamma = gamma
         self.momentum = momentum
         self.label_smoothing = label_smoothing
         self.batch_size = batch_size
         self.iterations = iterations
+        self.lr_policy = lr_policy 
         self.auto_balance = auto_balance
         self.max_val_acc = 0.0
         self.show_class_activation_map = show_class_activation_map
@@ -98,7 +104,6 @@ class SigmoidClassifier:
             batch_size=1,
             class_names=self.class_names,
             augmentation=False)
-        self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
 
         if pretrained_model_path != '':
             self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
@@ -157,10 +162,10 @@ class SigmoidClassifier:
         return image_paths, class_names, class_weights, include_unknown
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, y_true, label_smoothing, class_weights):
+    def compute_gradient(self, model, optimizer, batch_x, y_true, loss_function, class_weights):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
-            loss = AbsoluteLogarithmicError(label_smoothing=label_smoothing)(y_true, y_pred)
+            loss = loss_function(y_true, y_pred)
             batch_size = tf.cast(tf.shape(y_true)[0], dtype=tf.int32)
             class_weights_t = tf.convert_to_tensor(class_weights, dtype=y_pred.dtype)
             if tf.reduce_sum(class_weights_t) > 0.0:
@@ -217,18 +222,19 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.summary()
-        # optimizer = tf.keras.optimizers.SGD(lr=self.lr, momentum=self.momentum, nesterov=True)
         optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 
+        iteration_count = 0
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
-        iteration_count = 0
+        loss_function = AbsoluteLogarithmicError(gamma=self.gamma, label_smoothing=self.label_smoothing)
+        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
-                self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
-                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, self.label_smoothing, self.class_weights)
+                lr_scheduler.update(optimizer, iteration_count)
+                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, loss_function, self.class_weights)
                 if self.show_class_activation_map and iteration_count % 100 == 0:
                     try_count = 0
                     while True:
@@ -249,7 +255,7 @@ class SigmoidClassifier:
                     self.save_model(iteration_count)
                     print('train end successfully')
                     exit(0)
-                elif iteration_count % 1000 == 0:
+                elif iteration_count >= int(self.iterations * self.warm_up) and iteration_count % 1000 == 0:
                     self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
