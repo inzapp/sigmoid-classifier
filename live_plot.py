@@ -21,9 +21,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 
-class LivePlot():
+class LivePlot:
     def __init__(self, iterations, interval=20, mean=10, y_min=0.0, y_max=0.2, legend='loss'):
-        super().__init__()
         plt.style.use(['dark_background'])
         self.fig, self.ax = plt.subplots()
         pad = ((y_max - y_min) * 0.05)
