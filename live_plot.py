@@ -22,38 +22,41 @@ from matplotlib import pyplot as plt
 
 
 class LivePlot():
-    def __init__(self, batch_range=10000, y_min=0.0, y_max=1.0, title='Live plot', legend='val'):
+    def __init__(self, iterations, interval=20, mean=10, y_min=0.0, y_max=0.2, legend='loss'):
         super().__init__()
         plt.style.use(['dark_background'])
         self.fig, self.ax = plt.subplots()
         pad = ((y_max - y_min) * 0.05)
+        self.interval = interval
+        self.mean = mean
         self.y_min = y_min - pad
         self.y_max = y_max + pad
         self.ax.set_ylim(self.y_min, self.y_max)
-        self.data = [np.NaN for _ in range(batch_range)]
-        self.values, = self.ax.plot(np.random.rand(batch_range))
+        self.data = np.array([None for _ in range(iterations)], dtype=np.float32)
+        self.values, = self.ax.plot(np.random.rand(iterations))
         self.recent_values = []
-        self.skip_count = 0
-        plt.gcf().canvas.set_window_title(title)
-        plt.xlabel('Batch range')
+        self.interval_count = 0
+        self.index = 0
+        plt.xlabel('Iteration')
         plt.legend([legend])
         plt.tight_layout(pad=0.5)
 
-    def update(self, val, skip_count=20):
+    def update(self, val):
         if val < self.y_min:
             val = self.y_min * 0.99
         elif val > self.y_max:
             val = self.y_max * 0.99
-        self.data.pop(0)
-        self.data.append(self.get_recent_avg_value(val))
-        self.skip_count += 1
-        if self.skip_count == skip_count:
-            self.skip_count = 0
+        self.data[self.index] = self.get_recent_avg_value(val)
+        self.index += 1
+        self.interval_count += 1
+        if self.interval_count == self.interval:
+            self.interval_count = 0
             self.values.set_ydata(self.data)
             plt.pause(1e-9)
 
     def get_recent_avg_value(self, val):
-        if len(self.recent_values) > 10:
+        if len(self.recent_values) > self.mean:
             self.recent_values.pop(0)
         self.recent_values.append(val)
         return np.mean(self.recent_values)
+

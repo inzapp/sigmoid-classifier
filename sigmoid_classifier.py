@@ -114,7 +114,7 @@ class SigmoidClassifier:
                 last_conv_layer_name=last_conv_layer_name,
                 cam_activation_layer_name=cam_activation_layer_name).build()
             self.model.save('model.h5', include_optimizer=False)
-        self.live_loss_plot = LivePlot(legend='loss')
+        self.live_loss_plot = LivePlot(iterations=self.iterations, mean=10, interval=20, legend='loss')
 
     def unify_path(self, path):
         if path == '':
@@ -230,7 +230,7 @@ class SigmoidClassifier:
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
         loss_function = AbsoluteLogarithmicError(gamma=self.gamma, label_smoothing=self.label_smoothing)
-        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
+        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy, decay_step=0.2)
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 lr_scheduler.update(optimizer, iteration_count)
