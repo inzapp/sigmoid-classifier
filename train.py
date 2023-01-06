@@ -25,8 +25,10 @@ if __name__ == '__main__':
         validation_image_path=r'/train_data/imagenet/validation',
         input_shape=(64, 64, 1),
         lr=0.001,
+        gamma=2.0,
+        warm_up=0.5,
         momentum=0.9,
-        label_smoothing=0.01,
+        label_smoothing=0.1,
         batch_size=32,
         iterations=1000000,
         show_class_activation_map=False).fit()
