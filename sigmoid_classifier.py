@@ -230,7 +230,7 @@ class SigmoidClassifier:
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
         loss_function = AbsoluteLogarithmicError(gamma=self.gamma, label_smoothing=self.label_smoothing)
-        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy, decay_step=0.1)
+        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 lr_scheduler.update(optimizer, iteration_count)
