@@ -46,6 +46,7 @@ class SigmoidClassifier:
                  lr_policy='step',
                  model_name='model',
                  auto_balance=False,
+                 live_loss_plot=False,
                  pretrained_model_path='',
                  validation_image_path='',
                  show_class_activation_map=False,
@@ -62,6 +63,7 @@ class SigmoidClassifier:
         self.lr_policy = lr_policy 
         self.model_name = model_name
         self.auto_balance = auto_balance
+        self.live_loss_plot_flag = live_loss_plot
         self.max_val_acc = 0.0
         self.show_class_activation_map = show_class_activation_map
         self.cam_activation_layer_name = cam_activation_layer_name
@@ -250,7 +252,8 @@ class SigmoidClassifier:
                             label_idx = np.argmax(batch_y[rnum]).item()
                             break
                     self.draw_cam(new_input_tensor, label_idx)
-                self.live_loss_plot.update(loss)
+                if self.live_loss_plot_flag:
+                    self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count == self.iterations:
