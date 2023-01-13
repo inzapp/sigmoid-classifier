@@ -125,7 +125,7 @@ class SigmoidClassifier:
             return path
         path = path.replace('\\', '/')
         if path.endswith('/'):
-            path = path[len(self.root_path) - 1]
+            path = path[:-1]
         return path
 
     def init_image_paths(self, image_path):
