@@ -270,7 +270,7 @@ class SigmoidClassifier:
         else:
             # self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.train_data_generator_one_batch)
             val_acc, val_class_score, val_unknown_score = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
-            model_name = f'model_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
+            model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
             if self.include_unknown:
                 model_name += f'_unknown_score_{val_unknown_score:.4f}'
             if val_acc > self.max_val_acc:
