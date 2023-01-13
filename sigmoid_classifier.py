@@ -44,6 +44,7 @@ class SigmoidClassifier:
                  gamma=2.0,
                  warm_up=0.5,
                  lr_policy='step',
+                 model_name='model',
                  auto_balance=False,
                  pretrained_model_path='',
                  validation_image_path='',
@@ -59,6 +60,7 @@ class SigmoidClassifier:
         self.batch_size = batch_size
         self.iterations = iterations
         self.lr_policy = lr_policy 
+        self.model_name = model_name
         self.auto_balance = auto_balance
         self.max_val_acc = 0.0
         self.show_class_activation_map = show_class_activation_map
@@ -261,7 +263,7 @@ class SigmoidClassifier:
     def save_model(self, iteration_count):
         print(f'iteration count : {iteration_count}')
         if self.validation_data_generator.flow() is None:
-            self.model.save(f'checkpoints/model_{iteration_count}_iter.h5', include_optimizer=False)
+            self.model.save(f'checkpoints/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
         else:
             # self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.train_data_generator_one_batch)
             val_acc, val_class_score, val_unknown_score = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
