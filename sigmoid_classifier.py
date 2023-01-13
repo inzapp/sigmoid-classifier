@@ -226,7 +226,7 @@ class SigmoidClassifier:
 
     def fit(self):
         self.model.summary()
-        optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=self.momentum)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
         if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
             os.makedirs('checkpoints', exist_ok=True)
 

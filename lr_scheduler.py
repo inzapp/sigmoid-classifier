@@ -75,7 +75,7 @@ class LRScheduler:
         return lr
 
     def __set_lr(self, optimizer, lr):
-        optimizer.__setattr__('lr', lr)
+        optimizer.__setattr__('learning_rate', lr)
 
     def __set_momentum(self, optimizer, momentum):
         attr = ''
