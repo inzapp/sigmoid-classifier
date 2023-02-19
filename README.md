@@ -42,6 +42,52 @@ Softmax cannot be used because there exists a label that does not contain 1.
 
 And it is replaced by sigmoid.
 
+## Why Sigmoid?
+
+The following are the reasons for using sigmoid activation in the classification model.
+
+### 1. sigmoid classifier can improve the accuracy of the model by additionally training special labels with all nodes zero, which cannot be expressed in softmax.
+
+It is common to use softmax in classification models that are usually trained as one not vector.
+
+However, We improve classification accuracy by training information about unknown classes together in the classification model.
+
+And the value of all nodes in the label for an unknown class is zero and cannot be expressed as one hot vector.
+
+Therefore, training is not possible with softmax.
+
+### 2. Flexibility for Label smoothing
+
+If you use softmax, the sum of label tensors is forced to 1.
+
+Therefore, when training with label smoothing, the range of labels that can be trained is constrained.
+
+For example, if you want to learn a classification model with a tensor of [0.1, 0.1, 0.9], you can't express it with softmax because the sum of these tensors is 1.
+
+However, sigmoid allows us to test a variety of possibilities because it increases the range of labels that can be learned from this perspective.
+
+[0.4, 0.4, 0.9] You can also train with fully customized labels in this form.
+
+### 3. Independent logistic regression(multi classification)
+
+I am learning the model by replacing the classification problem with an independent logistic regression problem instead of a simple multiple-choice problem.
+
+This enables independent probability inference for each class.
+
+This enables multi-classification.
+
+This maximizes the effectiveness when data for the unknown class mentioned in No. 1 is included, compared to not.
+
+### 4. Zero centered logit
+
+With softmax, the distribution of logit values before going through softmax cannot be predicted without using the normalization layer.
+
+This indirectly indicates that the stability of softmax is related to the distribution of logits.
+
+However, using sigmoid limits the logit to between -20 and 20.
+
+In deep learning training, zero centered logit has the effect of stabilizing the training by itself.
+
 ## Perspective of probability
 
 The output of a classifier using softmax is often interpreted as the probability that it is a corresponding class.
