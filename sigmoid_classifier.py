@@ -47,6 +47,7 @@ class SigmoidClassifier:
                  model_name='model',
                  auto_balance=False,
                  live_loss_plot=False,
+                 checkpoint_interval=0,
                  pretrained_model_path='',
                  validation_image_path='',
                  show_class_activation_map=False,
@@ -68,6 +69,9 @@ class SigmoidClassifier:
         self.show_class_activation_map = show_class_activation_map
         self.cam_activation_layer_name = cam_activation_layer_name
         self.last_conv_layer_name = last_conv_layer_name
+        self.checkpoint_interval = checkpoint_interval
+        self.pretrained_iteration_count = 0
+        self.checkpoint_path = 'checkpoint'
 
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
@@ -110,7 +114,12 @@ class SigmoidClassifier:
             augmentation=False)
 
         if pretrained_model_path != '':
-            self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
+            if os.path.exists(pretrained_model_path) and os.path.isfile(pretrained_model_path):
+                self.pretrained_iteration_count = self.parse_pretrained_iteration_count(pretrained_model_path)
+                self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
+            else:
+                print(f'pretrained model not found : {pretrained_model_path}')
+                exit(0)
         else:
             self.model = Model(
                 input_shape=self.input_shape,
@@ -119,6 +128,18 @@ class SigmoidClassifier:
                 cam_activation_layer_name=cam_activation_layer_name).build()
             self.model.save('model.h5', include_optimizer=False)
         self.live_loss_plot = LivePlot(iterations=self.iterations, mean=10, interval=20, legend='loss')
+
+    def parse_pretrained_iteration_count(self, pretrained_model_path):
+        iteration_count = 0
+        sp = f'{os.path.basename(pretrained_model_path)[:-3]}'.split('_')
+        for i in range(len(sp)):
+            if sp[i] == 'iter' and i > 0:
+                try:
+                    iteration_count = int(sp[i-1])
+                except:
+                    pass
+                break
+        return iteration_count
 
     def unify_path(self, path):
         if path == '':
@@ -227,10 +248,10 @@ class SigmoidClassifier:
     def fit(self):
         self.model.summary()
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
-        if not (os.path.exists('checkpoints') and os.path.exists('checkpoints')):
-            os.makedirs('checkpoints', exist_ok=True)
+        if not (os.path.exists(self.checkpoint_path) and os.path.exists(self.checkpoint_path)):
+            os.makedirs(self.checkpoint_path, exist_ok=True)
 
-        iteration_count = 0
+        iteration_count = self.pretrained_iteration_count
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
         loss_function = AbsoluteLogarithmicError(gamma=self.gamma, label_smoothing=self.label_smoothing)
@@ -256,17 +277,23 @@ class SigmoidClassifier:
                     self.live_loss_plot.update(loss)
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
+                if iteration_count % 2000 == 0:
+                    for last_model_path in glob(f'{self.checkpoint_path}/model_last_*_iter.h5'):
+                        os.remove(last_model_path)
+                    self.model.save(f'{self.checkpoint_path}/model_last_{iteration_count}_iter.h5', include_optimizer=False)
                 if iteration_count == self.iterations:
                     self.save_model(iteration_count)
+                    for last_model_path in glob(f'{self.checkpoint_path}/model_last_*_iter.h5'):
+                        os.remove(last_model_path)
                     print('train end successfully')
                     exit(0)
-                elif iteration_count >= int(self.iterations * self.warm_up) and iteration_count % 1000 == 0:
+                elif iteration_count >= int(self.iterations * self.warm_up) and self.checkpoint_interval > 0 and iteration_count % self.checkpoint_interval == 0:
                     self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
         print(f'iteration count : {iteration_count}')
         if self.validation_data_generator.flow() is None:
-            self.model.save(f'checkpoints/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
+            self.model.save(f'{self.checkpoint_path}/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
         else:
             # self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.train_data_generator_one_batch)
             val_acc, val_class_score, val_unknown_score = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
@@ -275,10 +302,10 @@ class SigmoidClassifier:
                 model_name += f'_unknown_score_{val_unknown_score:.4f}'
             if val_acc > self.max_val_acc:
                 self.max_val_acc = val_acc
-                model_name = f'checkpoints/best_{model_name}.h5'
+                model_name = f'{self.checkpoint_path}/best_{model_name}.h5'
                 print(f'[best model saved]\n')
             else:
-                model_name = f'checkpoints/{model_name}.h5'
+                model_name = f'{self.checkpoint_path}/{model_name}.h5'
             self.model.save(model_name, include_optimizer=False)
 
     def evaluate(self, unknown_threshold=0.5):
