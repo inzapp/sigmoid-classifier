@@ -18,13 +18,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import os
-import shutil as sh
-from concurrent.futures import ThreadPoolExecutor
-from glob import glob
-
+import cv2
 import numpy as np
+import shutil as sh
 import tensorflow as tf
-from cv2 import cv2
+from concurrent.futures import ThreadPoolExecutor
+
+from glob import glob
 from tqdm import tqdm
 
 
