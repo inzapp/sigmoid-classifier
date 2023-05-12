@@ -38,7 +38,7 @@ class LRScheduler:
                  initial_cycle_length=2500,
                  cycle_weight=2,
                  decay_step=0.1,
-                 double_step=False):
+                 double_step=True):
         assert 0.0 <= lr <= 1.0
         assert 0.0 <= min_lr <= 1.0
         assert 0.0 <= warm_up <= 1.0
@@ -70,7 +70,7 @@ class LRScheduler:
         elif self.policy == 'constant':
             lr = self.lr
         else:
-            print(f'{policy} is invalid lr policy.')
+            print(f'{self.policy} is invalid lr policy.')
             lr = None
         return lr
 
@@ -78,7 +78,6 @@ class LRScheduler:
         optimizer.__setattr__('learning_rate', lr)
 
     def __set_momentum(self, optimizer, momentum):
-        attr = ''
         optimizer_str = optimizer.__str__().lower()
         if optimizer_str.find('sgd') > -1:
             optimizer.__setattr__('momentum', momentum)
@@ -87,7 +86,6 @@ class LRScheduler:
 
     def __warm_up_lr(self, iteration_count, warm_up):
         return ((np.cos(((iteration_count * np.pi) / warm_up) + np.pi) + 1.0) * 0.5) * self.lr  # cosine warm up
-        # return self.lr * pow(iteration_count / float(warm_up), 4)
 
     def __schedule_step_decay(self, optimizer, iteration_count):
         warm_up_iteration = self.iterations * self.warm_up
