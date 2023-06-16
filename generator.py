@@ -26,29 +26,36 @@ from concurrent.futures.thread import ThreadPoolExecutor
 
 
 class DataGenerator:
-    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names, augmentation=True):
-        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size, augmentation)
+    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names, aug_brightness=0.0, aug_contrast=0.0, aug_h_flip=False):
+        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size, aug_brightness, aug_contrast, aug_h_flip)
 
     def flow(self):
         return self.generator_flow
 
 
 class GeneratorFlow(tf.keras.utils.Sequence):
-    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size, augmentation):
+    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size, aug_brightness, aug_contrast, aug_h_flip):
+        assert 0.0 <= aug_brightness <= 1.0
+        assert 0.0 <= aug_contrast <= 1.0
+        assert type(aug_h_flip) == bool
         self.root_path = root_path
         self.image_paths = image_paths
         self.class_names = class_names
         self.num_classes = len(self.class_names)
         self.input_shape = input_shape
         self.batch_size = batch_size
-        self.augmentation = augmentation
         self.pool = ThreadPoolExecutor(8)
         self.img_index = 0
         np.random.shuffle(self.image_paths)
-        self.transform = A.Compose([
-            A.RandomBrightnessContrast(p=0.5, brightness_limit=0.2, contrast_limit=0.5),
-            A.GaussianBlur(p=0.5, blur_limit=(7, 7))
-        ])
+        aug_methods = []
+        if aug_brightness > 0.0 or aug_contrast > 0.0 or aug_h_flip:
+            if aug_brightness > 0.0 or aug_contrast > 0.0:
+                aug_methods.append(A.RandomBrightnessContrast(p=0.5, brightness_limit=aug_brightness, contrast_limit=aug_contrast))
+            aug_methods.append(A.GaussianBlur(p=0.5, blur_limit=(7, 7)))
+        if aug_h_flip:
+            aug_methods.append(A.HorizontalFlip(p=0.5))
+        self.transform = A.Compose(aug_methods)
+        self.augmentation = len(aug_methods) > 0
 
     def __getitem__(self, index):
         fs = []

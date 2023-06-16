@@ -29,7 +29,10 @@ if __name__ == '__main__':
         warm_up=0.5,
         momentum=0.9,
         batch_size=32,
-        label_smoothing=0.1,
         iterations=1000000,
+        label_smoothing=0.1,
+        aug_brightness=0.2,
+        aug_contrast=0.5,
+        aug_h_flip=True,
         checkpoint_interval=20000,
         show_class_activation_map=False).fit()

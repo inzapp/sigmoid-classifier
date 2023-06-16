@@ -35,21 +35,24 @@ from ale import AbsoluteLogarithmicError
 class SigmoidClassifier:
     def __init__(self,
                  train_image_path,
+                 validation_image_path,
                  input_shape,
                  lr,
+                 gamma,
+                 warm_up,
                  momentum,
-                 label_smoothing,
                  batch_size,
                  iterations,
-                 gamma=2.0,
-                 warm_up=0.5,
+                 label_smoothing,
+                 aug_brightness,
+                 aug_contrast,
+                 aug_h_flip,
                  lr_policy='step',
                  model_name='model',
                  auto_balance=False,
                  live_loss_plot=False,
                  checkpoint_interval=0,
                  pretrained_model_path='',
-                 validation_image_path='',
                  show_class_activation_map=False,
                  cam_activation_layer_name='cam_activation',
                  last_conv_layer_name='squeeze_conv'):
@@ -91,7 +94,10 @@ class SigmoidClassifier:
             image_paths=self.train_image_paths,
             input_shape=self.input_shape,
             batch_size=self.batch_size,
-            class_names=train_class_names)
+            class_names=train_class_names,
+            aug_brightness=aug_brightness,
+            aug_contrast=aug_contrast,
+            aug_h_flip=aug_h_flip)
         self.validation_data_generator = DataGenerator(
             root_path=validation_image_path,
             image_paths=self.validation_image_paths,
@@ -103,15 +109,13 @@ class SigmoidClassifier:
             image_paths=self.train_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
-            class_names=train_class_names,
-            augmentation=False)
+            class_names=train_class_names)
         self.validation_data_generator_one_batch = DataGenerator(
             root_path=validation_image_path,
             image_paths=self.validation_image_paths,
             input_shape=self.input_shape,
             batch_size=1,
-            class_names=self.class_names,
-            augmentation=False)
+            class_names=self.class_names)
 
         if pretrained_model_path != '':
             if os.path.exists(pretrained_model_path) and os.path.isfile(pretrained_model_path):
