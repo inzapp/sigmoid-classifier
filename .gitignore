@@ -4,5 +4,5 @@
 *.prototxt
 .idea/
 __pycache__/
-checkpoints/
+checkpoint/
 .svn/
