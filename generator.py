@@ -26,15 +26,15 @@ from concurrent.futures.thread import ThreadPoolExecutor
 
 
 class DataGenerator:
-    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names, aug_brightness=0.0, aug_contrast=0.0, aug_h_flip=False):
-        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size, aug_brightness, aug_contrast, aug_h_flip)
+    def __init__(self, root_path, image_paths, input_shape, batch_size, class_names, aug_brightness=0.0, aug_contrast=0.0, aug_rotate=0, aug_h_flip=False):
+        self.generator_flow = GeneratorFlow(root_path, image_paths, class_names, input_shape, batch_size, aug_brightness, aug_contrast, aug_rotate, aug_h_flip)
 
     def flow(self):
         return self.generator_flow
 
 
 class GeneratorFlow(tf.keras.utils.Sequence):
-    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size, aug_brightness, aug_contrast, aug_h_flip):
+    def __init__(self, root_path, image_paths, class_names, input_shape, batch_size, aug_brightness, aug_contrast, aug_rotate, aug_h_flip):
         assert 0.0 <= aug_brightness <= 1.0
         assert 0.0 <= aug_contrast <= 1.0
         assert type(aug_h_flip) == bool
@@ -48,9 +48,11 @@ class GeneratorFlow(tf.keras.utils.Sequence):
         self.img_index = 0
         np.random.shuffle(self.image_paths)
         aug_methods = []
-        if aug_brightness > 0.0 or aug_contrast > 0.0 or aug_h_flip:
+        if aug_brightness > 0.0 or aug_contrast > 0.0 or aug_rotate > 0 or aug_h_flip:
             if aug_brightness > 0.0 or aug_contrast > 0.0:
                 aug_methods.append(A.RandomBrightnessContrast(p=0.5, brightness_limit=aug_brightness, contrast_limit=aug_contrast))
+            if aug_rotate > 0:
+                aug_methods.append(A.Rotate(limit=aug_rotate, border_mode=0, value=0))
             aug_methods.append(A.GaussianBlur(p=0.5, blur_limit=(7, 7)))
         if aug_h_flip:
             aug_methods.append(A.HorizontalFlip(p=0.5))

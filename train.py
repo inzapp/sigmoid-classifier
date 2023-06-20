@@ -33,6 +33,7 @@ if __name__ == '__main__':
         label_smoothing=0.1,
         aug_brightness=0.2,
         aug_contrast=0.5,
+        aug_rotate=20,
         aug_h_flip=True,
         checkpoint_interval=20000,
         show_class_activation_map=False).fit()

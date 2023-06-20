@@ -46,6 +46,7 @@ class SigmoidClassifier:
                  label_smoothing,
                  aug_brightness,
                  aug_contrast,
+                 aug_rotate,
                  aug_h_flip,
                  lr_policy='step',
                  model_name='model',
@@ -97,6 +98,7 @@ class SigmoidClassifier:
             class_names=train_class_names,
             aug_brightness=aug_brightness,
             aug_contrast=aug_contrast,
+            aug_rotate=aug_rotate,
             aug_h_flip=aug_h_flip)
         self.validation_data_generator = DataGenerator(
             root_path=validation_image_path,
