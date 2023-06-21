@@ -38,6 +38,7 @@ class SigmoidClassifier:
                  validation_image_path,
                  input_shape,
                  lr,
+                 alpha,
                  gamma,
                  warm_up,
                  momentum,
@@ -60,6 +61,7 @@ class SigmoidClassifier:
         self.input_shape = input_shape
         self.lr = lr
         self.warm_up = warm_up
+        self.alpha = alpha
         self.gamma = gamma
         self.momentum = momentum
         self.label_smoothing = label_smoothing
@@ -260,7 +262,7 @@ class SigmoidClassifier:
         iteration_count = self.pretrained_iteration_count
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
-        loss_function = AbsoluteLogarithmicError(gamma=self.gamma, label_smoothing=self.label_smoothing)
+        loss_function = AbsoluteLogarithmicError(alpha=self.alpha, gamma=self.gamma, label_smoothing=self.label_smoothing)
         lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
