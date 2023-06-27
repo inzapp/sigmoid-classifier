@@ -41,8 +41,8 @@ class AbsoluteLogarithmicError(tf.keras.losses.Loss):
     def __init__(self, alpha=0.5, gamma=0.0, label_smoothing=0.0, reduce='none', name='AbsoluteLogarithmicError'):
         """
         Args:
-            alpha: Downweight the loss where zero value positioned in y_true tensor.
-            gamma: Same gamma parameter used in focal loss.
+            alpha: Weight of the loss where not positive value positioned in y_true tensor.
+            gamma: Focusing power, same gamma parameter used in focal loss.
             label_smoothing: y_true tensor is clipped in range (label_smoothing, 1.0 - label_smoothing).
                 for example,
                 label_smoothing=0.1 : [0.0, 0.0, 1.0, 0.0] -> [0.1, 0.1, 0.9, 0.1]
@@ -58,7 +58,7 @@ class AbsoluteLogarithmicError(tf.keras.losses.Loss):
         self.gamma = gamma
         self.label_smoothing = label_smoothing
         self.reduce = reduce
-        assert 0.0 <= self.alpha <= 0.5
+        assert 0.0 <= self.alpha <= 1.0
         assert self.gamma == 0.0 or self.gamma >= 1.0
         assert 0.0 <= self.label_smoothing <= 0.5
         assert self.reduce in ['none', 'mean', 'sum', 'sum_over_batch_size']
@@ -82,7 +82,7 @@ class AbsoluteLogarithmicError(tf.keras.losses.Loss):
         loss = -tf.math.log((1.0 + eps) - abs_error)
         if self.gamma >= 1.0:
             alpha = tf.ones_like(y_true) * self.alpha
-            alpha = tf.where(y_true == 1.0, alpha, 1.0 - alpha)
+            alpha = tf.where(y_true != 1.0, alpha, 1.0 - alpha)
             weight = tf.pow(abs_error, self.gamma) * alpha
             loss *= weight
         if self.reduce == 'mean':
