@@ -29,6 +29,7 @@ from tqdm import tqdm
 
 
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+g_save_with_score_dir = False
 g_unknown_threshold = 0.5
 
 
@@ -60,13 +61,40 @@ def auto_classification(model_path, image_path):
         x, image_path = f.result()
         y = model.predict_on_batch(x=x)[0]
         class_index = np.argmax(y)
+
         score = y[class_index]
+        score_dir = ''
+        if g_save_with_score_dir:
+            score_dir = 'under_10'
+            if score > 0.9:
+                score_dir = 'over_90'
+            elif score > 0.8:
+                score_dir = 'over_80'
+            elif score > 0.7:
+                score_dir = 'over_70'
+            elif score > 0.6:
+                score_dir = 'over_60'
+            elif score > 0.5:
+                score_dir = 'over_50'
+            elif score > 0.4:
+                score_dir = 'over_40'
+            elif score > 0.3:
+                score_dir = 'over_30'
+            elif score > 0.2:
+                score_dir = 'over_20'
+            elif score > 0.1:
+                score_dir = 'over_10'
+
         if score < g_unknown_threshold:
             save_dir = f'{save_path}/unknown'
+            if g_save_with_score_dir:
+                save_dir += f'/{score_dir}'
             os.makedirs(save_dir, exist_ok=True)
             sh.move(image_path, save_dir)
         else:
             save_dir = f'{save_path}/{class_index}'
+            if g_save_with_score_dir:
+                save_dir += f'/{score_dir}'
             os.makedirs(save_dir, exist_ok=True)
             sh.move(image_path, save_dir)
 
@@ -80,3 +108,4 @@ def main():
 if __name__ == '__main__':
     with tf.device('/cpu:0'):
         main()
+
