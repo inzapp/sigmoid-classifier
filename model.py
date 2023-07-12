@@ -34,28 +34,36 @@ class Model:
     def build(self):
         input_layer = tf.keras.layers.Input(shape=self.input_shape)
         x = self.__conv_block(input_layer, 16, 3)
-        x = self.__max_pool(x)
+        if self.is_stride_over(2):
+            x = self.__max_pool(x)
 
         x = self.__dropout(x, 0.1)
         x = self.__conv_block(x, 32, 3)
-        x = self.__max_pool(x)
+        if self.is_stride_over(4):
+            x = self.__max_pool(x)
 
         x = self.__dropout(x, 0.15)
         x = self.__conv_block(x, 64, 3)
-        x = self.__max_pool(x)
+        if self.is_stride_over(8):
+            x = self.__max_pool(x)
 
         x = self.__dropout(x, 0.2)
         x = self.__conv_block(x, 128, 3)
-        x = self.__max_pool(x)
+        if self.is_stride_over(16):
+            x = self.__max_pool(x)
 
         x = self.__dropout(x, 0.25)
         x = self.__conv_block(x, 256, 3, cam_activation=True)
-        x = self.__max_pool(x)
+        if self.is_stride_over(32):
+            x = self.__max_pool(x)
 
         x = self.__dropout(x, 0.3)
         x = self.__conv_block(x, 256, 3)
         output_layer = self.__classification_layer(x)
         return tf.keras.models.Model(input_layer, output_layer)
+
+    def is_stride_over(self, stride):
+        return self.input_shape[0] >= stride and self.input_shape[1] >= stride
 
     def __conv_block(self, x, filters, kernel_size, bn=False, cam_activation=False):
         x = self.__conv(x, filters, kernel_size, use_bias=False if bn else True)
