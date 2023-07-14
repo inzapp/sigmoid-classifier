@@ -54,7 +54,6 @@ class SigmoidClassifier:
                  auto_balance=False,
                  live_loss_plot=False,
                  checkpoint_interval=0,
-                 pretrained_model_path='',
                  show_class_activation_map=False,
                  cam_activation_layer_name='cam_activation',
                  last_conv_layer_name='squeeze_conv'):
