@@ -18,17 +18,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import os
+import cv2
+import random
+import warnings
+import numpy as np
+import silence_tensorflow.auto
+import tensorflow as tf
+
 from glob import glob
 from tqdm import tqdm
-
-import cv2
-import numpy as np
-import tensorflow as tf
-import random
 from model import Model
+from live_plot import LivePlot
 from generator import DataGenerator
 from lr_scheduler import LRScheduler
-from live_plot import LivePlot
 from ale import AbsoluteLogarithmicError
 
 
@@ -77,6 +79,7 @@ class SigmoidClassifier:
         self.checkpoint_interval = checkpoint_interval
         self.pretrained_iteration_count = 0
         self.checkpoint_path = 'checkpoint'
+        warnings.filterwarnings(action='ignore')
 
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
