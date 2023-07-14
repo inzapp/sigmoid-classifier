@@ -305,7 +305,7 @@ class SigmoidClassifier:
         if self.validation_data_generator.flow() is None:
             self.model.save(f'{self.checkpoint_path}/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
         else:
-            val_acc, val_class_score, val_unknown_score = self.evaluate(unknown_threshold=0.5, data_generator=self.validation_data_generator_one_batch)
+            val_acc, val_class_score, val_unknown_score = self.evaluate(unknown_threshold=0.5, dataset='validation')
             model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
             if self.include_unknown:
                 model_name += f'_unknown_score_{val_unknown_score:.4f}'
