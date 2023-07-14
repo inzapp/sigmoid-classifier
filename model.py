@@ -32,7 +32,7 @@ class Model:
         self.cam_activation_layer_name = cam_activation_layer_name
 
     def build(self):
-        input_layer = tf.keras.layers.Input(shape=self.input_shape)
+        input_layer = tf.keras.layers.Input(shape=self.input_shape, name='sc_input')
         x = self.__conv_block(input_layer, 16, 3)
         if self.is_stride_over(2):
             x = self.__max_pool(x)
@@ -80,7 +80,7 @@ class Model:
             padding='same',
             use_bias=use_bias)(x)
 
-    def __classification_layer(self, x, name='output'):
+    def __classification_layer(self, x, name='sc_output'):
         x = tf.keras.layers.Conv2D(
             filters=self.num_classes,
             kernel_size=1,
