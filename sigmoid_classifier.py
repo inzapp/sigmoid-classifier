@@ -121,21 +121,21 @@ class SigmoidClassifier:
             batch_size=1,
             class_names=self.class_names)
 
-        if pretrained_model_path != '':
-            if os.path.exists(pretrained_model_path) and os.path.isfile(pretrained_model_path):
-                self.pretrained_iteration_count = self.parse_pretrained_iteration_count(pretrained_model_path)
-                self.model = tf.keras.models.load_model(pretrained_model_path, compile=False)
-            else:
-                print(f'pretrained model not found : {pretrained_model_path}')
-                exit(0)
-        else:
-            self.model = Model(
-                input_shape=self.input_shape,
-                num_classes=len(self.class_names),
-                last_conv_layer_name=last_conv_layer_name,
-                cam_activation_layer_name=cam_activation_layer_name).build()
-            self.model.save('model.h5', include_optimizer=False)
+        self.model = Model(
+            input_shape=self.input_shape,
+            num_classes=len(self.class_names),
+            last_conv_layer_name=last_conv_layer_name,
+            cam_activation_layer_name=cam_activation_layer_name).build()
+        self.model.save('model.h5', include_optimizer=False)
         self.live_loss_plot = LivePlot(iterations=self.iterations, mean=10, interval=20, legend='loss')
+
+    def load_model(self, model_path):
+        if os.path.exists(model_path) and os.path.isfile(model_path):
+            self.pretrained_iteration_count = self.parse_pretrained_iteration_count(model_path)
+            self.model = tf.keras.models.load_model(model_path, compile=False)
+        else:
+            print(f'pretrained model not found : {model_path}')
+            exit(0)
 
     def parse_pretrained_iteration_count(self, pretrained_model_path):
         iteration_count = 0
@@ -253,7 +253,7 @@ class SigmoidClassifier:
         cv2.imshow('cam', image_grid)
         cv2.waitKey(1)
 
-    def fit(self):
+    def train(self):
         self.model.summary()
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
         if not (os.path.exists(self.checkpoint_path) and os.path.exists(self.checkpoint_path)):
@@ -303,8 +303,7 @@ class SigmoidClassifier:
         if self.validation_data_generator.flow() is None:
             self.model.save(f'{self.checkpoint_path}/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
         else:
-            # self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.train_data_generator_one_batch)
-            val_acc, val_class_score, val_unknown_score = self.evaluate_core(unknown_threshold=0.5, validation_data_generator=self.validation_data_generator_one_batch)
+            val_acc, val_class_score, val_unknown_score = self.evaluate_core(unknown_threshold=0.5, data_generator=self.validation_data_generator_one_batch)
             model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
             if self.include_unknown:
                 model_name += f'_unknown_score_{val_unknown_score:.4f}'
@@ -316,21 +315,25 @@ class SigmoidClassifier:
                 model_name = f'{self.checkpoint_path}/{model_name}.h5'
             self.model.save(model_name, include_optimizer=False)
 
-    def evaluate(self, unknown_threshold=0.5):
-        self.evaluate_core(unknown_threshold=unknown_threshold, validation_data_generator=self.validation_data_generator_one_batch)
+    def evaluate(self, dataset, unknown_threshold=0.5):
+        assert dataset in ['train', 'validation']
+        if dataset == 'train':
+            data_generator = self.train_data_generator_one_batch
+        else:
+            data_generator = self.validation_data_generator_one_batch
 
-    def evaluate_core(self, unknown_threshold=0.5, validation_data_generator=None):
         @tf.function
-        def predict(model, x):
+        def graph_forward(model, x):
             return model(x, training=False)
+
         num_classes = self.model.output_shape[1]
         hit_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         total_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         hit_unknown_count = total_unknown_count = 0
         hit_scores = np.zeros(shape=(num_classes,), dtype=np.float32)
         unknown_score_sum = 0.0
-        for batch_x, batch_y in tqdm(validation_data_generator.flow()):
-            y = predict(self.model, batch_x)[0]
+        for batch_x, batch_y in tqdm(data_generator.flow()):
+            y = graph_forward(self.model, batch_x)[0]
             max_score_index = np.argmax(y)
             max_score = y[max_score_index]
             if np.sum(batch_y[0]) == 0.0:  # case unknown using zero label
