@@ -32,9 +32,10 @@ from live_plot import LivePlot
 from generator import DataGenerator
 from lr_scheduler import LRScheduler
 from ale import AbsoluteLogarithmicError
+from ckpt_manager import CheckpointManager
 
 
-class SigmoidClassifier:
+class SigmoidClassifier(CheckpointManager):
     def __init__(self,
                  train_image_path,
                  validation_image_path,
@@ -69,7 +70,6 @@ class SigmoidClassifier:
         self.batch_size = batch_size
         self.iterations = iterations
         self.lr_policy = lr_policy 
-        self.model_name = model_name
         self.auto_balance = auto_balance
         self.live_loss_plot_flag = live_loss_plot
         self.max_val_acc = 0.0
@@ -78,8 +78,8 @@ class SigmoidClassifier:
         self.last_conv_layer_name = last_conv_layer_name
         self.checkpoint_interval = checkpoint_interval
         self.pretrained_iteration_count = 0
-        self.checkpoint_path = 'checkpoint'
         warnings.filterwarnings(action='ignore')
+        self.set_model_name(model_name)
 
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
@@ -138,18 +138,6 @@ class SigmoidClassifier:
         else:
             print(f'pretrained model not found : {model_path}')
             exit(0)
-
-    def parse_pretrained_iteration_count(self, pretrained_model_path):
-        iteration_count = 0
-        sp = f'{os.path.basename(pretrained_model_path)[:-3]}'.split('_')
-        for i in range(len(sp)):
-            if sp[i] == 'iter' and i > 0:
-                try:
-                    iteration_count = int(sp[i-1])
-                except:
-                    pass
-                break
-        return iteration_count
 
     def unify_path(self, path):
         if path == '':
@@ -257,15 +245,13 @@ class SigmoidClassifier:
 
     def train(self):
         self.model.summary()
-        optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
-        if not (os.path.exists(self.checkpoint_path) and os.path.exists(self.checkpoint_path)):
-            os.makedirs(self.checkpoint_path, exist_ok=True)
-
-        iteration_count = self.pretrained_iteration_count
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
+        optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
         loss_function = AbsoluteLogarithmicError(alpha=self.alpha, gamma=self.gamma, label_smoothing=self.label_smoothing)
         lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
+        self.init_checkpoint_dir()
+        iteration_count = self.pretrained_iteration_count
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 lr_scheduler.update(optimizer, iteration_count)
@@ -288,13 +274,11 @@ class SigmoidClassifier:
                 iteration_count += 1
                 print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
                 if iteration_count % 2000 == 0:
-                    for last_model_path in glob(f'{self.checkpoint_path}/model_last_*_iter.h5'):
-                        os.remove(last_model_path)
-                    self.model.save(f'{self.checkpoint_path}/model_last_{iteration_count}_iter.h5', include_optimizer=False)
+                    self.save_last_model(self.model, iteration_count)
                 if iteration_count == self.iterations:
+                    self.save_last_model(self.model, iteration_count)
                     self.save_model(iteration_count)
-                    for last_model_path in glob(f'{self.checkpoint_path}/model_last_*_iter.h5'):
-                        os.remove(last_model_path)
+                    self.remove_last_model()
                     print('train end successfully')
                     exit(0)
                 elif iteration_count >= int(self.iterations * self.warm_up) and self.checkpoint_interval > 0 and iteration_count % self.checkpoint_interval == 0:
@@ -303,10 +287,10 @@ class SigmoidClassifier:
     def save_model(self, iteration_count):
         print(f'iteration count : {iteration_count}')
         if self.validation_data_generator.flow() is None:
-            self.model.save(f'{self.checkpoint_path}/{self.model_name}_{iteration_count}_iter.h5', include_optimizer=False)
+            self.save_last_model(self.model, iteration_count)
         else:
             val_acc, val_class_score, val_unknown_score = self.evaluate(unknown_threshold=0.5, dataset='validation')
-            model_name = f'{self.model_name}_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
+            model_name = f'model_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
             if self.include_unknown:
                 model_name += f'_unknown_score_{val_unknown_score:.4f}'
             if val_acc > self.max_val_acc:
