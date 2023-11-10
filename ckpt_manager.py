@@ -1,7 +1,7 @@
 """
 Authors : inzapp
 
-Github url : https://github.com/inzapp/denoising-model
+Github url : https://github.com/inzapp/ckpt-manager
 
 Copyright (c) 2023 Inzapp
 
