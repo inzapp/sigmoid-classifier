@@ -29,6 +29,7 @@ import tensorflow as tf
 from glob import glob
 from tqdm import tqdm
 from model import Model
+from eta import ETACalculator
 from live_plot import LivePlot
 from generator import DataGenerator
 from lr_scheduler import LRScheduler
@@ -246,6 +247,9 @@ class SigmoidClassifier(CheckpointManager):
         cv2.waitKey(1)
 
     def train(self):
+        if self.pretrained_iteration_count >= self.iterations:
+            print(f'pretrained iteration count {self.pretrained_iteration_count} is greater or equal than target iterations {self.iterations}')
+            exit(0)
         self.model.summary()
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
@@ -254,6 +258,8 @@ class SigmoidClassifier(CheckpointManager):
         lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
         self.init_checkpoint_dir()
         iteration_count = self.pretrained_iteration_count
+        eta_calculator = ETACalculator(iterations=self.iterations, start_iteration=iteration_count)
+        eta_calculator.start()
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 lr_scheduler.update(optimizer, iteration_count)
@@ -274,7 +280,8 @@ class SigmoidClassifier(CheckpointManager):
                 if self.live_loss_plot_flag:
                     self.live_loss_plot.update(loss)
                 iteration_count += 1
-                print(f'\r[iteration count : {iteration_count:6d}] loss => {loss:.4f}', end='')
+                progress_str = eta_calculator.update(iteration_count)
+                print(f'\r{progress_str} loss => {loss:.4f}', end='')
                 if iteration_count % 2000 == 0:
                     self.save_last_model(self.model, iteration_count)
                 if iteration_count == self.iterations:
@@ -287,7 +294,7 @@ class SigmoidClassifier(CheckpointManager):
                     self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
-        print(f'iteration count : {iteration_count}')
+        print()
         if self.validation_data_generator.flow() is None:
             self.save_last_model(self.model, iteration_count)
         else:
