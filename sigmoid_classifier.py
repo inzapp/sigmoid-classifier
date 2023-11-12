@@ -61,6 +61,7 @@ class SigmoidClassifier(CheckpointManager):
                  show_class_activation_map=False,
                  cam_activation_layer_name='cam_activation',
                  last_conv_layer_name='squeeze_conv'):
+        super().__init__()
         self.input_shape = input_shape
         self.lr = lr
         self.warm_up = warm_up
