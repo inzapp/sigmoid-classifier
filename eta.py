@@ -38,8 +38,8 @@ class ETACalculator:
 
     def start(self):
         self.start_time = perf_counter()
+        self.recent_times.append(self.start_time)
         self.recent_iterations.append(self.start_iteration)
-        self.recent_times.append(perf_counter())
 
     def end(self):
         avg_ips = float(self.iterations - self.start_iteration) / (perf_counter() - self.start_time)
@@ -73,7 +73,7 @@ class ETACalculator:
     def update(self, iteration_count, return_values=False):
         self.update_buffer(iteration_count)
         elapsed_sec = self.recent_times[-1] - self.recent_times[0]
-        total_iterations = iteration_count - self.recent_iterations[0]
+        total_iterations = self.recent_iterations[-1] - self.recent_iterations[0]
         ips = total_iterations / elapsed_sec
         eta = (self.iterations - iteration_count) / ips
         elapsed_time = perf_counter() - self.start_time
@@ -103,5 +103,5 @@ if __name__ == '__main__':
             break
     avg_ips, elapsed_time = eta_calculator.end()
     eta_calculator.reset()
-    print(f'\ntotal {total_iterations} iterations end successfully with avg IPS {avg_ips:.1f}, elapsed time : {elapsed_time}')
+    print(f'\ntotal {total_iterations} iterations end successfully with avg IPS {avg_ips:.2f}, elapsed time : {elapsed_time}')
 
