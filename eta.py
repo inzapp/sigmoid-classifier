@@ -39,6 +39,8 @@ class ETACalculator:
         self.warm_up_end = False
 
     def start(self):
+        self.recent_times = []
+        self.recent_iterations = []
         self.start_time = perf_counter()
         self.recent_times.append(self.start_time)
         self.recent_iterations.append(self.start_iteration)
@@ -49,10 +51,6 @@ class ETACalculator:
         avg_ips = float(self.iterations - self.start_iteration) / (perf_counter() - self.start_time)
         elapsed_time = self.convert_to_time_str(int(perf_counter() - self.start_time))
         return avg_ips, elapsed_time
-
-    def reset(self):
-        self.recent_times = []
-        self.recent_iterations = []
 
     def update_buffer(self, iteration_count):
         self.recent_times.append(perf_counter())
