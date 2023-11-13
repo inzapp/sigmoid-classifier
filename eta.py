@@ -28,18 +28,22 @@ from time import perf_counter
 
 
 class ETACalculator:
-    def __init__(self, iterations, start_iteration=0, buffer_size=100):
+    def __init__(self, iterations, start_iteration=0, buffer_size=500):
         self.iterations = iterations
         self.start_iteration = start_iteration
         self.buffer_size = buffer_size
         self.start_time = 0
         self.recent_times = []
         self.recent_iterations = []
+        self.warm_up_cnt = 0
+        self.warm_up_end = False
 
     def start(self):
         self.start_time = perf_counter()
         self.recent_times.append(self.start_time)
         self.recent_iterations.append(self.start_iteration)
+        self.warm_up_cnt = 0
+        self.warm_up_end = False
 
     def end(self):
         avg_ips = float(self.iterations - self.start_iteration) / (perf_counter() - self.start_time)
@@ -53,10 +57,17 @@ class ETACalculator:
     def update_buffer(self, iteration_count):
         self.recent_times.append(perf_counter())
         self.recent_iterations.append(iteration_count)
-        if len(self.recent_times) > self.buffer_size:
-            self.recent_times.pop(0)
-        if len(self.recent_iterations) > self.buffer_size:
-            self.recent_iterations.pop(0)
+        if self.warm_up_end:
+            if len(self.recent_times) > self.buffer_size:
+                self.recent_times.pop(0)
+                self.recent_iterations.pop(0)
+        else:
+            if len(self.recent_times) > 2:
+                self.recent_times.pop(0)
+                self.recent_iterations.pop(0)
+                self.warm_up_cnt += 1
+                if self.warm_up_cnt == 3:
+                    self.warm_up_end = True
 
     def convert_to_time_str(self, total_sec):
         times = []
