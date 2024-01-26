@@ -245,6 +245,7 @@ class SigmoidClassifier(CheckpointManager):
         if self.pretrained_iteration_count >= self.iterations:
             print(f'pretrained iteration count {self.pretrained_iteration_count} is greater or equal than target iterations {self.iterations}')
             exit(0)
+
         self.model.summary()
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
@@ -256,54 +257,51 @@ class SigmoidClassifier(CheckpointManager):
         eta_calculator = ETACalculator(iterations=self.iterations, start_iteration=iteration_count)
         eta_calculator.start()
         while True:
-            for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
-                lr_scheduler.update(optimizer, iteration_count)
-                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, loss_function)
-                if self.show_class_activation_map and iteration_count % 100 == 0:
-                    try_count = 0
-                    while True:
-                        if try_count > len(batch_x):
-                            break
-                        rnum = random.randint(0, len(batch_x) - 1)
-                        if np.all(batch_y[rnum] < 0.3):  # skip cam view if unknown data
-                            continue
-                        else:
-                            new_input_tensor = batch_x[rnum]
-                            label_idx = np.argmax(batch_y[rnum]).item()
-                            break
-                    self.draw_cam(new_input_tensor, label_idx)
-                if self.live_loss_plot_flag:
-                    self.live_loss_plot.update(loss)
-                iteration_count += 1
-                progress_str = eta_calculator.update(iteration_count)
-                self.print_loss(progress_str, loss)
-                if iteration_count % 2000 == 0:
-                    self.save_last_model(self.model, iteration_count)
-                if iteration_count == self.iterations:
-                    self.save_last_model(self.model, iteration_count)
-                    self.save_model(iteration_count)
-                    self.remove_last_model()
-                    print('train end successfully')
-                    exit(0)
-                elif iteration_count >= int(self.iterations * self.warm_up) and self.checkpoint_interval > 0 and iteration_count % self.checkpoint_interval == 0:
-                    self.save_model(iteration_count)
+            batch_x, batch_y = self.train_data_generator.load()
+            lr_scheduler.update(optimizer, iteration_count)
+            loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, loss_function)
+            if self.show_class_activation_map and iteration_count % 100 == 0:
+                try_count = 0
+                while True:
+                    if try_count > len(batch_x):
+                        break
+                    rnum = random.randint(0, len(batch_x) - 1)
+                    if np.all(batch_y[rnum] < 0.3):  # skip cam view if unknown data
+                        continue
+                    else:
+                        new_input_tensor = batch_x[rnum]
+                        label_idx = np.argmax(batch_y[rnum]).item()
+                        break
+                self.draw_cam(new_input_tensor, label_idx)
+            if self.live_loss_plot_flag:
+                self.live_loss_plot.update(loss)
+            iteration_count += 1
+            progress_str = eta_calculator.update(iteration_count)
+            self.print_loss(progress_str, loss)
+            if iteration_count % 2000 == 0:
+                self.save_last_model(self.model, iteration_count)
+            if iteration_count == self.iterations:
+                self.save_last_model(self.model, iteration_count)
+                self.save_model(iteration_count)
+                self.remove_last_model()
+                print('train end successfully')
+                exit(0)
+            elif iteration_count >= int(self.iterations * self.warm_up) and self.checkpoint_interval > 0 and iteration_count % self.checkpoint_interval == 0:
+                self.save_model(iteration_count)
 
     def save_model(self, iteration_count):
         print()
-        if self.validation_data_generator.flow() is None:
-            self.save_last_model(self.model, iteration_count)
+        val_acc, val_class_score, val_unknown_score = self.evaluate(unknown_threshold=0.5, dataset='validation')
+        model_name = f'model_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
+        if self.include_unknown:
+            model_name += f'_unknown_score_{val_unknown_score:.4f}'
+        if val_acc > self.max_val_acc:
+            self.max_val_acc = val_acc
+            model_name = f'{self.checkpoint_path}/best_{model_name}.h5'
+            print(f'[best model saved]\n')
         else:
-            val_acc, val_class_score, val_unknown_score = self.evaluate(unknown_threshold=0.5, dataset='validation')
-            model_name = f'model_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
-            if self.include_unknown:
-                model_name += f'_unknown_score_{val_unknown_score:.4f}'
-            if val_acc > self.max_val_acc:
-                self.max_val_acc = val_acc
-                model_name = f'{self.checkpoint_path}/best_{model_name}.h5'
-                print(f'[best model saved]\n')
-            else:
-                model_name = f'{self.checkpoint_path}/{model_name}.h5'
-            self.model.save(model_name, include_optimizer=False)
+            model_name = f'{self.checkpoint_path}/{model_name}.h5'
+        self.model.save(model_name, include_optimizer=False)
 
     def evaluate(self, dataset, unknown_threshold=0.5):
         assert dataset in ['train', 'validation']
@@ -322,7 +320,8 @@ class SigmoidClassifier(CheckpointManager):
         hit_unknown_count = total_unknown_count = 0
         hit_scores = np.zeros(shape=(num_classes,), dtype=np.float32)
         unknown_score_sum = 0.0
-        for batch_x, batch_y in tqdm(data_generator.flow()):
+        for _ in tqdm(range(len(data_generator))):
+            batch_x, batch_y = data_generator.load()
             y = graph_forward(self.model, batch_x)[0]
             max_score_index = np.argmax(y)
             max_score = y[max_score_index]
