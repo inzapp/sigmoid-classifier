@@ -67,10 +67,7 @@ class GeneratorFlow(tf.keras.utils.Sequence):
         batch_y = []
         for f in fs:
             img, path = f.result()
-            if self.augmentation:
-                img = self.transform(image=img)['image']
-            img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
-            x = np.asarray(img).reshape(self.input_shape).astype('float32') / 255.0
+            x = self.preprocess(img, aug=self.augmentation)
             batch_x.append(x)
 
             dir_name = path.replace(self.root_path, '').split('/')[1]
@@ -99,8 +96,16 @@ class GeneratorFlow(tf.keras.utils.Sequence):
             img = cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
         return img
 
-    def load_img(self, path):
-        img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if self.input_shape[2] == 1 else cv2.IMREAD_COLOR)
+    def preprocess(self, img, aug=False):
+        img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
+        if aug:
+            img = self.transform(image=img)['image']
         if self.input_shape[-1] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # swap rb
+        x = np.asarray(img).reshape(self.input_shape).astype('float32') / 255.0
+        return x
+
+    def load_img(self, path):
+        img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if self.input_shape[-1] == 1 else cv2.IMREAD_COLOR)
         return img, path
+
