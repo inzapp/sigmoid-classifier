@@ -56,7 +56,6 @@ class SigmoidClassifier(CheckpointManager):
                  aug_h_flip,
                  lr_policy='step',
                  model_name='model',
-                 auto_balance=False,
                  live_loss_plot=False,
                  checkpoint_interval=0,
                  show_class_activation_map=False,
@@ -73,7 +72,6 @@ class SigmoidClassifier(CheckpointManager):
         self.batch_size = batch_size
         self.iterations = iterations
         self.lr_policy = lr_policy 
-        self.auto_balance = auto_balance
         self.live_loss_plot_flag = live_loss_plot
         self.max_val_acc = 0.0
         self.show_class_activation_map = show_class_activation_map
@@ -87,8 +85,8 @@ class SigmoidClassifier(CheckpointManager):
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
 
-        self.train_image_paths, train_class_names, self.class_weights, _ = self.init_image_paths(train_image_path)
-        self.validation_image_paths, validation_class_names, _, self.include_unknown = self.init_image_paths(validation_image_path)
+        self.train_image_paths, train_class_names, _ = self.init_image_paths(train_image_path)
+        self.validation_image_paths, validation_class_names, self.include_unknown = self.init_image_paths(validation_image_path)
         if len(self.train_image_paths) == 0:
             print(f'no images in train_image_path : {train_image_path}')
             exit(0)
@@ -184,21 +182,15 @@ class SigmoidClassifier(CheckpointManager):
         print()
         class_names = sorted(list(class_name_set))
         total_data_count = float(sum(class_counts)) + unknown_class_count
-        class_weights = [1.0 - (count / total_data_count) if self.auto_balance else 0.0 for count in class_counts]
-        return image_paths, class_names, class_weights, include_unknown
+        return image_paths, class_names, include_unknown
 
     @tf.function
-    def compute_gradient(self, model, optimizer, batch_x, y_true, loss_function, class_weights):
+    def compute_gradient(self, model, optimizer, batch_x, y_true, loss_function):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
             loss = loss_function(y_true, y_pred)
-            batch_size = tf.cast(tf.shape(y_true)[0], dtype=tf.int32)
-            class_weights_t = tf.convert_to_tensor(class_weights, dtype=y_pred.dtype)
-            if tf.reduce_sum(class_weights_t) > 0.0:
-                class_weights_t = tf.repeat(tf.expand_dims(class_weights_t, axis=0), repeats=batch_size, axis=0)
-                class_weights_t = tf.where(y_true == 1.0, class_weights_t, 1.0 - class_weights_t)
-                loss *= class_weights_t
-            loss = tf.reduce_sum(loss) / tf.cast(batch_size, dtype=loss.dtype)
+            batch_size_f = tf.cast(tf.shape(y_true)[0], dtype=loss.dtype)
+            loss = tf.reduce_sum(loss) / batch_size_f
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return loss
@@ -246,6 +238,9 @@ class SigmoidClassifier(CheckpointManager):
         cv2.imshow('cam', image_grid)
         cv2.waitKey(1)
 
+    def print_loss(self, progress_str, loss):
+        print(f'\r{progress_str} loss => {loss:.4f}', end='')
+
     def train(self):
         if self.pretrained_iteration_count >= self.iterations:
             print(f'pretrained iteration count {self.pretrained_iteration_count} is greater or equal than target iterations {self.iterations}')
@@ -263,7 +258,7 @@ class SigmoidClassifier(CheckpointManager):
         while True:
             for idx, (batch_x, batch_y) in enumerate(self.train_data_generator.flow()):
                 lr_scheduler.update(optimizer, iteration_count)
-                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, loss_function, self.class_weights)
+                loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, loss_function)
                 if self.show_class_activation_map and iteration_count % 100 == 0:
                     try_count = 0
                     while True:
@@ -281,7 +276,7 @@ class SigmoidClassifier(CheckpointManager):
                     self.live_loss_plot.update(loss)
                 iteration_count += 1
                 progress_str = eta_calculator.update(iteration_count)
-                print(f'\r{progress_str} loss => {loss:.4f}', end='')
+                self.print_loss(progress_str, loss)
                 if iteration_count % 2000 == 0:
                     self.save_last_model(self.model, iteration_count)
                 if iteration_count == self.iterations:
