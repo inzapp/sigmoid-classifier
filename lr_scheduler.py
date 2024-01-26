@@ -31,7 +31,6 @@ class LRScheduler:
                  iterations,
                  lr,
                  policy,
-                 min_lr=0.0,
                  warm_up=0.1,
                  min_momentum=0.85,
                  max_momentum=0.95,
@@ -40,7 +39,6 @@ class LRScheduler:
                  decay_step=0.1,
                  double_step=True):
         assert 0.0 <= lr <= 1.0
-        assert 0.0 <= min_lr <= 1.0
         assert 0.0 <= warm_up <= 1.0
         assert 0.0 <= min_momentum <= 1.0
         assert 0.0 <= max_momentum <= 1.0
@@ -48,7 +46,6 @@ class LRScheduler:
         assert policy in ['constant', 'step', 'cosine', 'onecycle']
         self.lr = lr
         self.policy = policy
-        self.min_lr = min_lr
         self.max_lr = self.lr
         self.warm_up = warm_up
         self.min_momentum = min_momentum
@@ -57,6 +54,7 @@ class LRScheduler:
         self.cycle_length = initial_cycle_length
         self.cycle_weight = cycle_weight
         self.decay_step = decay_step 
+        self.min_lr = self.lr * self.decay_step ** 2.0
         self.double_step = double_step
         self.cycle_step = 0
 
@@ -92,7 +90,7 @@ class LRScheduler:
         if warm_up_iteration > 0 and iteration_count <= warm_up_iteration:
             lr = self.__warm_up_lr(iteration_count, warm_up_iteration)
         elif self.double_step and iteration_count >= int(self.iterations * 0.9):
-            lr = self.lr * self.decay_step * self.decay_step
+            lr = self.lr * self.decay_step ** 2.0
         elif iteration_count >= int(self.iterations * 0.8):
             lr = self.lr * self.decay_step
         else:
@@ -101,19 +99,19 @@ class LRScheduler:
         return lr
 
     def __schedule_one_cycle(self, optimizer, iteration_count):
-        warm_up = 0.3
-        min_lr = self.min_lr
+        min_lr = 0.0
         max_lr = self.max_lr
         min_mm = self.min_momentum
         max_mm = self.max_momentum
-        warm_up_iterations = int(self.iterations * warm_up)
-        if iteration_count <= warm_up_iterations:
+        warm_up_iterations = int(self.iterations * self.warm_up)
+        if warm_up_iterations > 0 and iteration_count <= warm_up_iterations:
             iterations = warm_up_iterations
             lr = ((np.cos(((iteration_count * np.pi) / iterations) + np.pi) + 1.0) * 0.5) * (max_lr - min_lr) + min_lr  # increase only until target iterations
             mm = ((np.cos(((iteration_count * np.pi) / iterations) +   0.0) + 1.0) * 0.5) * (max_mm - min_mm) + min_mm  # decrease only until target iterations
             self.__set_lr(optimizer, lr)
             self.__set_momentum(optimizer, mm)
         else:
+            min_lr = self.min_lr
             iteration_count -= warm_up_iterations + 1
             iterations = self.iterations - warm_up_iterations
             lr = ((np.cos(((iteration_count * np.pi) / iterations) +   0.0) + 1.0) * 0.5) * (max_lr - min_lr) + min_lr  # decrease only until target iterations
@@ -140,7 +138,7 @@ def plot_lr(policy):
     import tensorflow as tf
     from matplotlib import pyplot as plt
     lr = 0.001
-    warm_up = 0.1
+    warm_up = 0.3
     decay_step = 0.2
     iterations = 37500
     iterations = int(iterations / (1.0 - warm_up))
