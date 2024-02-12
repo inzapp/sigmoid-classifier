@@ -189,9 +189,7 @@ class SigmoidClassifier(CheckpointManager):
     def compute_gradient(self, model, optimizer, batch_x, y_true, loss_function):
         with tf.GradientTape() as tape:
             y_pred = self.model(batch_x, training=True)
-            loss = loss_function(y_true, y_pred)
-            batch_size_f = tf.cast(tf.shape(y_true)[0], dtype=loss.dtype)
-            loss = tf.reduce_sum(loss) / batch_size_f
+            loss = tf.reduce_mean(loss_function(y_true, y_pred))
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return loss
