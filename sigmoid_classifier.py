@@ -62,6 +62,7 @@ class SigmoidClassifier(CheckpointManager):
                  cam_activation_layer_name='cam_activation',
                  last_conv_layer_name='squeeze_conv'):
         super().__init__()
+        assert checkpoint_interval >= 1000
         self.input_shape = input_shape
         self.lr = lr
         self.warm_up = warm_up
@@ -73,7 +74,6 @@ class SigmoidClassifier(CheckpointManager):
         self.iterations = iterations
         self.lr_policy = lr_policy 
         self.live_loss_plot_flag = live_loss_plot
-        self.max_val_acc = 0.0
         self.show_class_activation_map = show_class_activation_map
         self.cam_activation_layer_name = cam_activation_layer_name
         self.last_conv_layer_name = last_conv_layer_name
@@ -280,30 +280,17 @@ class SigmoidClassifier(CheckpointManager):
             self.print_loss(progress_str, loss)
             if iteration_count % 2000 == 0:
                 self.save_last_model(self.model, iteration_count)
+            if iteration_count >= int(self.iterations * self.warm_up) and iteration_count % self.checkpoint_interval == 0:
+                acc, class_score, unknown_score = self.evaluate()
+                content = f'_acc_{acc:.4f}_class_score_{class_score:.4f}'
+                if self.include_unknown:
+                    content += f'_unknown_score_{unknown_score:.4f}'
+                self.save_best_model(self.model, iteration_count, content=content, metric=acc)
             if iteration_count == self.iterations:
-                self.save_last_model(self.model, iteration_count)
-                self.save_model(iteration_count)
-                self.remove_last_model()
-                print('train end successfully')
-                exit(0)
-            elif iteration_count >= int(self.iterations * self.warm_up) and self.checkpoint_interval > 0 and iteration_count % self.checkpoint_interval == 0:
-                self.save_model(iteration_count)
+                print('\ntrain end successfully')
+                break
 
-    def save_model(self, iteration_count):
-        print()
-        val_acc, val_class_score, val_unknown_score = self.evaluate(unknown_threshold=0.5, dataset='validation')
-        model_name = f'model_{iteration_count}_iter_acc_{val_acc:.4f}_class_score_{val_class_score:.4f}'
-        if self.include_unknown:
-            model_name += f'_unknown_score_{val_unknown_score:.4f}'
-        if val_acc > self.max_val_acc:
-            self.max_val_acc = val_acc
-            model_name = f'{self.checkpoint_path}/best_{model_name}.h5'
-            print(f'[best model saved]\n')
-        else:
-            model_name = f'{self.checkpoint_path}/{model_name}.h5'
-        self.model.save(model_name, include_optimizer=False)
-
-    def evaluate(self, dataset, unknown_threshold=0.5):
+    def evaluate(self, dataset='validation', unknown_threshold=0.5):
         assert dataset in ['train', 'validation']
         if dataset == 'train':
             data_generator = self.train_data_generator_one_batch
@@ -314,6 +301,7 @@ class SigmoidClassifier(CheckpointManager):
         def graph_forward(model, x):
             return model(x, training=False)
 
+        print()
         num_classes = self.model.output_shape[1]
         hit_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
         total_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
@@ -342,7 +330,6 @@ class SigmoidClassifier(CheckpointManager):
                         hit_counts[true_class_index] += 1
                         hit_scores[true_class_index] += max_score
 
-        print('\n')
         total_acc_sum = 0.0
         class_score_sum = 0.0
         for i in range(len(total_counts)):
@@ -364,8 +351,8 @@ class SigmoidClassifier(CheckpointManager):
         class_acc = total_acc_sum / valid_class_count
         class_score = class_score_sum / num_classes
         if self.include_unknown:
-            print(f'sigmoid classifier accuracy with unknown threshold({unknown_threshold:.2f}) : {class_acc:.4f}, class_score : {class_score:.4f}, unknown_score : {unknown_score:.4f}')
+            print(f'sigmoid classifier accuracy with unknown threshold({unknown_threshold:.2f}) : {class_acc:.4f}, class_score : {class_score:.4f}, unknown_score : {unknown_score:.4f}\n')
         else:
-            print(f'sigmoid classifier accuracy : {class_acc:.4f}, class_score : {class_score:.4f}')
+            print(f'sigmoid classifier accuracy : {class_acc:.4f}, class_score : {class_score:.4f}\n')
         return class_acc, class_score, unknown_score
 
