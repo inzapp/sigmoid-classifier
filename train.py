@@ -26,6 +26,7 @@ if __name__ == '__main__':
     classifier = SigmoidClassifier(
         train_image_path=r'/train_data/imagenet/train',
         validation_image_path=r'/train_data/imagenet/validation',
+        model_name='imagenet',
         input_shape=(64, 64, 1),
         lr=0.001,
         alpha=0.5,
