@@ -45,6 +45,7 @@ class SigmoidClassifier(CheckpointManager):
                  model_name,
                  input_shape,
                  lr,
+                 lrf,
                  alpha,
                  gamma,
                  warm_up,
@@ -66,6 +67,7 @@ class SigmoidClassifier(CheckpointManager):
         assert checkpoint_interval >= 1000
         self.input_shape = input_shape
         self.lr = lr
+        self.lrf = lrf
         self.warm_up = warm_up
         self.alpha = alpha
         self.gamma = gamma
@@ -250,7 +252,7 @@ class SigmoidClassifier(CheckpointManager):
         print(f'validate on {len(self.validation_image_paths)} samples\n')
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
         loss_function = AbsoluteLogarithmicError(alpha=self.alpha, gamma=self.gamma, label_smoothing=self.label_smoothing)
-        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
+        lr_scheduler = LRScheduler(lr=self.lr, lrf=self.lrf, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
         self.init_checkpoint_dir()
         iteration_count = self.pretrained_iteration_count
         eta_calculator = ETACalculator(iterations=self.iterations, start_iteration=iteration_count)

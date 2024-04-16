@@ -29,6 +29,7 @@ if __name__ == '__main__':
         model_name='imagenet',
         input_shape=(64, 64, 1),
         lr=0.001,
+        lrf=0.05,
         alpha=0.5,
         gamma=2.0,
         warm_up=0.5,
