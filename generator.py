@@ -69,8 +69,8 @@ class DataGenerator(tf.keras.utils.Sequence):
             if dir_name != 'unknown':
                 y[self.class_names.index(dir_name)] = 1.0
             batch_y.append(y)
-        batch_x = np.asarray(batch_x).reshape((self.batch_size,) + self.input_shape).astype('float32')
-        batch_y = np.asarray(batch_y).reshape((self.batch_size, self.num_classes)).astype('float32')
+        batch_x = np.asarray(batch_x).reshape((self.batch_size,) + self.input_shape).astype(np.float32)
+        batch_y = np.asarray(batch_y).reshape((self.batch_size, self.num_classes)).astype(np.float32)
         return batch_x, batch_y
 
     def preprocess(self, img, aug=False):
@@ -79,7 +79,7 @@ class DataGenerator(tf.keras.utils.Sequence):
             img = self.transform(image=img)['image']
         if self.input_shape[-1] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # swap rb
-        x = np.asarray(img).reshape(self.input_shape).astype('float32') / 255.0
+        x = np.asarray(img).reshape(self.input_shape).astype(np.float32) / 255.0
         return x
 
     def get_next_image_path(self):

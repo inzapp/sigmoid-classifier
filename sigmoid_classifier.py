@@ -219,7 +219,7 @@ class SigmoidClassifier(CheckpointManager):
             cam -= np.min(cam)
             cam /= np.max(cam)
             cam *= 255.0
-            cam = cam.astype('uint8')
+            cam = cam.astype(np.uint8)
             cam = cv2.resize(cam, (img_w, img_h))
             cam = cam[..., np.newaxis]
             cam = np.concatenate([cam, cam, cam], axis=-1)
@@ -228,8 +228,8 @@ class SigmoidClassifier(CheckpointManager):
             cam_blended = cv2.addWeighted((org_image * 255).astype(np.uint8), alpha, cam_jet, (1 - alpha), 0)
 
             label_box = np.zeros((img_h, 20, 3), dtype=np.float32) + float(label == idx)
-            label_box = (label_box * 255.0).astype('uint8')
-            org_image = (org_image * 255.0).astype('uint8')
+            label_box = (label_box * 255.0).astype(np.uint8)
+            org_image = (org_image * 255.0).astype(np.uint8)
             grid_row = np.concatenate([label_box, org_image, cam, cam_jet, cam_blended], axis=1)
             image_grid = np.append(image_grid, grid_row, axis=0) if image_grid is not None else grid_row.copy()
         if window_size_h is not None:
