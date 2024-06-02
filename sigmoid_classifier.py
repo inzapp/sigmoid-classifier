@@ -300,11 +300,12 @@ class SigmoidClassifier(CheckpointManager):
 
         print()
         num_classes = self.model.output_shape[1]
-        hit_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
-        total_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
-        hit_unknown_count = total_unknown_count = 0
-        hit_scores = np.zeros(shape=(num_classes,), dtype=np.float32)
-        unknown_score_sum = 0.0
+        hit_class_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
+        total_class_counts = np.zeros(shape=(num_classes,), dtype=np.int32)
+        hit_class_score_sums = np.zeros(shape=(num_classes,), dtype=np.float32)
+        hit_unknown_count = 0
+        total_unknown_count = 0
+        hit_unknown_score_sum = 0.0
         for _ in tqdm(range(len(data_generator))):
             batch_x, batch_y = data_generator.load()
             y = graph_forward(self.model, batch_x)[0]
@@ -314,24 +315,24 @@ class SigmoidClassifier(CheckpointManager):
                 total_unknown_count += 1
                 if max_score < unknown_threshold:
                     hit_unknown_count += 1
-                    unknown_score_sum += max_score
+                    hit_unknown_score_sum += max_score
             else:  # case classification
                 true_class_index = np.argmax(batch_y[0])
-                total_counts[true_class_index] += 1
+                total_class_counts[true_class_index] += 1
                 if max_score_index == true_class_index:
                     if self.include_unknown:
                         if max_score >= unknown_threshold:
-                            hit_counts[true_class_index] += 1
-                            hit_scores[true_class_index] += max_score
+                            hit_class_counts[true_class_index] += 1
+                            hit_class_score_sums[true_class_index] += max_score
                     else:
-                        hit_counts[true_class_index] += 1
-                        hit_scores[true_class_index] += max_score
+                        hit_class_counts[true_class_index] += 1
+                        hit_class_score_sums[true_class_index] += max_score
 
         total_acc_sum = 0.0
         class_score_sum = 0.0
-        for i in range(len(total_counts)):
-            cur_class_acc = hit_counts[i] / (float(total_counts[i]) + 1e-5)
-            cur_class_score = hit_scores[i] / (float(hit_counts[i]) + 1e-5)
+        for i in range(len(total_class_counts)):
+            cur_class_acc = hit_class_counts[i] / (float(total_class_counts[i]) + 1e-5)
+            cur_class_score = hit_class_score_sums[i] / (float(hit_class_counts[i]) + 1e-5)
             total_acc_sum += cur_class_acc
             class_score_sum += cur_class_score
             print(f'[class {i:2d}] acc : {cur_class_acc:.4f}, score : {cur_class_score:.4f}')
@@ -340,7 +341,7 @@ class SigmoidClassifier(CheckpointManager):
         unknown_score = 0.0
         if self.include_unknown and total_unknown_count > 0:
             unknown_acc = hit_unknown_count / float(total_unknown_count + 1e-5)
-            unknown_score = unknown_score_sum / float(hit_unknown_count + 1e-5)
+            unknown_score = hit_unknown_score_sum / float(hit_unknown_count + 1e-5)
             total_acc_sum += unknown_acc
             valid_class_count += 1
             print(f'[class unknown] acc : {unknown_acc:.4f}, score : {unknown_score:.4f}')
@@ -348,8 +349,8 @@ class SigmoidClassifier(CheckpointManager):
         class_acc = total_acc_sum / valid_class_count
         class_score = class_score_sum / num_classes
         if self.include_unknown:
-            print(f'sigmoid classifier accuracy with unknown threshold({unknown_threshold:.2f}) : {class_acc:.4f}, class_score : {class_score:.4f}, unknown_score : {unknown_score:.4f}\n')
+            print(f'total accuracy with unknown threshold({unknown_threshold:.2f}) : {class_acc:.4f}, class_score : {class_score:.4f}, unknown_score : {unknown_score:.4f}\n')
         else:
-            print(f'sigmoid classifier accuracy : {class_acc:.4f}, class_score : {class_score:.4f}\n')
+            print(f'total accuracy : {class_acc:.4f}, class_score : {class_score:.4f}\n')
         return class_acc, class_score, unknown_score
 
