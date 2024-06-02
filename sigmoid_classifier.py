@@ -58,7 +58,6 @@ class SigmoidClassifier(CheckpointManager):
                  aug_rotate,
                  aug_h_flip,
                  lr_policy='step',
-                 live_loss_plot=False,
                  checkpoint_interval=0,
                  show_class_activation_map=False,
                  cam_activation_layer_name='cam_activation',
@@ -76,7 +75,6 @@ class SigmoidClassifier(CheckpointManager):
         self.batch_size = batch_size
         self.iterations = iterations
         self.lr_policy = lr_policy 
-        self.live_loss_plot_flag = live_loss_plot
         self.show_class_activation_map = show_class_activation_map
         self.cam_activation_layer_name = cam_activation_layer_name
         self.last_conv_layer_name = last_conv_layer_name
@@ -133,7 +131,6 @@ class SigmoidClassifier(CheckpointManager):
             last_conv_layer_name=last_conv_layer_name,
             cam_activation_layer_name=cam_activation_layer_name).build()
         self.model.save('model.h5', include_optimizer=False)
-        self.live_loss_plot = LivePlot(iterations=self.iterations, mean=10, interval=20, legend='loss')
 
     def load_model(self, model_path):
         if os.path.exists(model_path) and os.path.isfile(model_path):
@@ -274,8 +271,6 @@ class SigmoidClassifier(CheckpointManager):
                         label_idx = np.argmax(batch_y[rnum]).item()
                         break
                 self.draw_cam(new_input_tensor, label_idx)
-            if self.live_loss_plot_flag:
-                self.live_loss_plot.update(loss)
             iteration_count += 1
             progress_str = eta_calculator.update(iteration_count)
             self.print_loss(progress_str, loss)
