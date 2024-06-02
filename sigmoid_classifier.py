@@ -130,7 +130,6 @@ class SigmoidClassifier(CheckpointManager):
             num_classes=len(self.class_names),
             last_conv_layer_name=last_conv_layer_name,
             cam_activation_layer_name=cam_activation_layer_name).build()
-        self.model.save('model.h5', include_optimizer=False)
 
     def load_model(self, model_path):
         if os.path.exists(model_path) and os.path.isfile(model_path):
