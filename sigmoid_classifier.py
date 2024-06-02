@@ -34,7 +34,7 @@ from eta import ETACalculator
 from live_plot import LivePlot
 from generator import DataGenerator
 from lr_scheduler import LRScheduler
-from ale import AbsoluteLogarithmicError
+from ace import AdaptiveCrossentropy
 from ckpt_manager import CheckpointManager
 
 
@@ -63,7 +63,7 @@ class SigmoidClassifier(CheckpointManager):
                  cam_activation_layer_name='cam_activation',
                  last_conv_layer_name='squeeze_conv'):
         super().__init__()
-        assert checkpoint_interval >= 1000
+        assert checkpoint_interval == 0 or checkpoint_interval >= 1000
         self.input_shape = input_shape
         self.lr = lr
         self.lrf = lrf
@@ -82,6 +82,8 @@ class SigmoidClassifier(CheckpointManager):
         self.pretrained_iteration_count = 0
         warnings.filterwarnings(action='ignore')
         self.set_model_name(model_name)
+        if self.checkpoint_interval == 0:
+            self.checkpoint_interval = self.iterations
 
         train_image_path = self.unify_path(train_image_path)
         validation_image_path = self.unify_path(validation_image_path)
@@ -247,7 +249,7 @@ class SigmoidClassifier(CheckpointManager):
         print(f'\ntrain on {len(self.train_image_paths)} samples')
         print(f'validate on {len(self.validation_image_paths)} samples\n')
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr, beta_1=self.momentum)
-        loss_function = AbsoluteLogarithmicError(alpha=self.alpha, gamma=self.gamma, label_smoothing=self.label_smoothing)
+        loss_function = AdaptiveCrossentropy(alpha=self.alpha, gamma=self.gamma, label_smoothing=self.label_smoothing)
         lr_scheduler = LRScheduler(lr=self.lr, lrf=self.lrf, iterations=self.iterations, warm_up=self.warm_up, policy=self.lr_policy)
         self.init_checkpoint_dir()
         iteration_count = self.pretrained_iteration_count

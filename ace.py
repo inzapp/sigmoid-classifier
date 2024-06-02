@@ -1,9 +1,9 @@
 """
 Authors : inzapp
 
-Github url : https://github.com/inzapp/absolute-logarithmic-error
+Github url : https://github.com/inzapp/adaptive-crossentropy
 
-Copyright 2022 inzapp Authors. All Rights Reserved.
+Copyright 2023 inzapp Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"),
 you may not use this file except in compliance with the License.
@@ -20,25 +20,23 @@ limitations under the License.
 import tensorflow as tf
 
 
-class AbsoluteLogarithmicError(tf.keras.losses.Loss):
-    """Computes the cross-entropy log scale loss between true labels and predicted labels.
+class AdaptiveCrossentropy(tf.keras.losses.Loss):
+    """Computes the adaptive cross-entropy loss between true labels and predicted labels.
 
-    This loss function can be used regardless of classification problem or regression problem.
-
-    See: https://github.com/inzapp/absolute-logarithmic-error
+    See: https://github.com/inzapp/adaptive-crossentropy
 
     Standalone usage:
         >>> y_true = [[0, 1], [0, 0]]
         >>> y_pred = [[0.6, 0.4], [0.4, 0.6]]
-        >>> ale = AbsoluteLogarithmicError()
-        >>> loss = ale(y_true, y_pred)
+        >>> ace = AdaptiveCrossentropy()
+        >>> loss = ace(y_true, y_pred)
         >>> loss.numpy()
-        array([[0.9162905, 0.9162905], [0.5108255, 0.9162905]], dtype=float32)
+        array([[0.9162906 0.9162905], [0.5108254 0.9162906]], dtype=float32)
 
     Usage:
-        model.compile(optimizer='sgd', loss=AbsoluteLogarithmicError())
+        model.compile(optimizer='sgd', loss=AdaptiveCrossentropy())
     """
-    def __init__(self, alpha=0.0, gamma=0.0, label_smoothing=0.0, reduce='none', name='AbsoluteLogarithmicError'):
+    def __init__(self, alpha=0.0, gamma=0.0, label_smoothing=0.0, reduce='none', name='AdaptiveCrossentropy'):
         """
         Args:
             alpha: Weight of the loss where not positive value positioned in y_true tensor.
@@ -79,14 +77,14 @@ class AbsoluteLogarithmicError(tf.keras.losses.Loss):
         eps = tf.cast(self.eps, y_pred.dtype)
         y_true_clip = tf.clip_by_value(y_true, self.label_smoothing, 1.0 - self.label_smoothing)
         y_pred_clip = tf.clip_by_value(y_pred, eps, 1.0 - eps)
-        abs_error = tf.abs(y_true_clip - y_pred_clip)
-        loss = -tf.math.log((1.0 + eps) - abs_error)
+        loss = -((y_true * tf.math.log(y_pred + eps)) + ((1.0 - y_true) * tf.math.log(1.0 - y_pred + eps)))
         if self.alpha > 0.0:
             alpha = tf.ones_like(y_true) * self.alpha
             alpha = tf.where(y_true != 1.0, alpha, 1.0 - alpha)
             loss *= alpha
         if self.gamma >= 1.0:
-            loss *= tf.pow(abs_error, self.gamma)
+            adaptive_weight = tf.pow(tf.abs(y_true_clip - y_pred_clip), self.gamma)
+            loss *= adaptive_weight
         if self.reduce == 'mean':
             loss = tf.reduce_mean(loss)
         elif self.reduce == 'sum':
