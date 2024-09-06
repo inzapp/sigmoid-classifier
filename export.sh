@@ -1,5 +1,5 @@
 #!/bin/bash
-ls -alrt checkpoint/*.h5 | awk '{print $9}'
+ls -alrt checkpoint/*/*.h5 | awk '{print $9}'
 echo
 echo -n 'input model path for export : '
 read MODEL_PATH
