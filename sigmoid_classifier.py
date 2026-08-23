@@ -20,8 +20,6 @@ limitations under the License.
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
-import cv2
-import random
 import warnings
 import numpy as np
 import silence_tensorflow.auto
@@ -31,7 +29,6 @@ from glob import glob
 from tqdm import tqdm
 from model import Model
 from eta import ETACalculator
-from live_plot import LivePlot
 from generator import DataGenerator
 from lr_scheduler import LRScheduler
 from ace import AdaptiveCrossentropy
@@ -58,10 +55,7 @@ class SigmoidClassifier(CheckpointManager):
                  aug_rotate,
                  aug_h_flip,
                  lr_policy='step',
-                 checkpoint_interval=0,
-                 show_class_activation_map=False,
-                 cam_activation_layer_name='cam_activation',
-                 last_conv_layer_name='squeeze_conv'):
+                 checkpoint_interval=0):
         super().__init__()
         assert checkpoint_interval == 0 or checkpoint_interval >= 1000
         self.input_shape = input_shape
@@ -75,9 +69,6 @@ class SigmoidClassifier(CheckpointManager):
         self.batch_size = batch_size
         self.iterations = iterations
         self.lr_policy = lr_policy 
-        self.show_class_activation_map = show_class_activation_map
-        self.cam_activation_layer_name = cam_activation_layer_name
-        self.last_conv_layer_name = last_conv_layer_name
         self.checkpoint_interval = checkpoint_interval
         self.pretrained_iteration_count = 0
         warnings.filterwarnings(action='ignore')
@@ -129,9 +120,7 @@ class SigmoidClassifier(CheckpointManager):
 
         self.model = Model(
             input_shape=self.input_shape,
-            num_classes=len(self.class_names),
-            last_conv_layer_name=last_conv_layer_name,
-            cam_activation_layer_name=cam_activation_layer_name).build()
+            num_classes=len(self.class_names)).build()
 
     def load_model(self, model_path):
         if os.path.exists(model_path) and os.path.isfile(model_path):
@@ -194,49 +183,6 @@ class SigmoidClassifier(CheckpointManager):
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return loss
 
-    def draw_cam(self, x, label, window_size_h=512, alpha=0.6):
-        cam_activation_layer = self.model.get_layer(name=self.cam_activation_layer_name).output
-        activation_h, activation_w, activation_c = cam_activation_layer.shape[1:]
-        cam_model = tf.keras.Model(self.model.input, cam_activation_layer)
-        weights = np.asarray(self.model.get_layer(name=self.last_conv_layer_name).get_weights()[0].squeeze())
-        img_h, img_w, img_c = x.shape
-
-        activation_map = np.asarray(cam_model(x[tf.newaxis, ...], training=False)[0])
-        if img_c == 1:
-            x = np.concatenate([x, x, x], axis=-1)
-        image_grid = None
-        for idx, cls in enumerate(self.class_names):
-            org_image = x.copy()
-            if img_c == 3:
-                org_image = cv2.cvtColor(org_image, cv2.COLOR_RGB2BGR)
-
-            class_weights = weights[:, idx]
-            cam = np.zeros((activation_h, activation_w), dtype=np.float32)
-            for i in range(activation_c):
-                cam += class_weights[i] * activation_map[:, :, i]
-            cam = np.array(cam)
-
-            cam -= np.min(cam)
-            cam /= np.max(cam)
-            cam *= 255.0
-            cam = cam.astype(np.uint8)
-            cam = cv2.resize(cam, (img_w, img_h))
-            cam = cam[..., np.newaxis]
-            cam = np.concatenate([cam, cam, cam], axis=-1)
-
-            cam_jet = cv2.applyColorMap(cam, cv2.COLORMAP_JET)
-            cam_blended = cv2.addWeighted((org_image * 255).astype(np.uint8), alpha, cam_jet, (1 - alpha), 0)
-
-            label_box = np.zeros((img_h, 20, 3), dtype=np.float32) + float(label == idx)
-            label_box = (label_box * 255.0).astype(np.uint8)
-            org_image = (org_image * 255.0).astype(np.uint8)
-            grid_row = np.concatenate([label_box, org_image, cam, cam_jet, cam_blended], axis=1)
-            image_grid = np.append(image_grid, grid_row, axis=0) if image_grid is not None else grid_row.copy()
-        if window_size_h is not None:
-            image_grid = cv2.resize(image_grid, ((window_size_h * image_grid.shape[1]) // image_grid.shape[0], window_size_h))
-        cv2.imshow('cam', image_grid)
-        cv2.waitKey(1)
-
     def print_loss(self, progress_str, loss):
         print(f'\r{progress_str} loss => {loss:.4f}', end='')
 
@@ -259,19 +205,6 @@ class SigmoidClassifier(CheckpointManager):
             batch_x, batch_y = self.train_data_generator.load()
             lr_scheduler.update(optimizer, iteration_count)
             loss = self.compute_gradient(self.model, optimizer, batch_x, batch_y, loss_function)
-            if self.show_class_activation_map and iteration_count % 100 == 0:
-                try_count = 0
-                while True:
-                    if try_count > len(batch_x):
-                        break
-                    rnum = random.randint(0, len(batch_x) - 1)
-                    if np.all(batch_y[rnum] < 0.3):  # skip cam view if unknown data
-                        continue
-                    else:
-                        new_input_tensor = batch_x[rnum]
-                        label_idx = np.argmax(batch_y[rnum]).item()
-                        break
-                self.draw_cam(new_input_tensor, label_idx)
             iteration_count += 1
             progress_str = eta_calculator.update(iteration_count)
             self.print_loss(progress_str, loss)
@@ -353,4 +286,3 @@ class SigmoidClassifier(CheckpointManager):
         else:
             print(f'total accuracy : {class_acc:.4f}, class_score : {class_score:.4f}\n')
         return class_acc, class_score, unknown_score
-

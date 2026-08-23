@@ -41,8 +41,7 @@ if __name__ == '__main__':
         aug_contrast=0.3,
         aug_rotate=15,
         aug_h_flip=False,
-        checkpoint_interval=10000,
-        show_class_activation_map=False)
+        checkpoint_interval=10000)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='', help='pretrained model path')
@@ -55,4 +54,3 @@ if __name__ == '__main__':
         classifier.evaluate(dataset=args.dataset)
     else:
         classifier.train()
-

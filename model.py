@@ -22,11 +22,9 @@ import tensorflow as tf
 
 
 class Model:
-    def __init__(self, input_shape, num_classes, last_conv_layer_name, cam_activation_layer_name):
+    def __init__(self, input_shape, num_classes):
         self.input_shape = input_shape
         self.num_classes = num_classes
-        self.last_conv_layer_name = last_conv_layer_name
-        self.cam_activation_layer_name = cam_activation_layer_name
 
     def build(self):
         input_layer = tf.keras.layers.Input(shape=self.input_shape, name='sc_input')
@@ -50,7 +48,7 @@ class Model:
             x = self.maxpooling2d(x)
 
         x = self.dropout(x, 0.25)
-        x = self.conv2d(x, 256, 3, cam_activation=True)
+        x = self.conv2d(x, 256, 3)
         if self.is_stride_over(32):
             x = self.maxpooling2d(x)
 
@@ -62,7 +60,7 @@ class Model:
     def is_stride_over(self, stride):
         return self.input_shape[0] >= stride and self.input_shape[1] >= stride
 
-    def conv2d(self, x, filters, kernel_size, bn=False, cam_activation=False):
+    def conv2d(self, x, filters, kernel_size, bn=False):
         x = tf.keras.layers.Conv2D(
             filters=filters,
             padding='same',
@@ -71,7 +69,7 @@ class Model:
             kernel_initializer='he_normal')(x)
         if bn:
             x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Activation('relu', name=self.cam_activation_layer_name if cam_activation else None)(x)
+        x = tf.keras.layers.Activation('relu')(x)
         return x
 
     def classification_layer(self, x, name='sc_output'):
@@ -79,8 +77,7 @@ class Model:
             filters=self.num_classes,
             kernel_size=1,
             kernel_initializer='glorot_normal',
-            activation='sigmoid',
-            name=self.last_conv_layer_name)(x)
+            activation='sigmoid')(x)
         return tf.keras.layers.GlobalAveragePooling2D(name=name)(x)
 
     def maxpooling2d(self, x):
@@ -88,4 +85,3 @@ class Model:
 
     def dropout(self, x, rate):
         return tf.keras.layers.Dropout(rate)(x)
-
